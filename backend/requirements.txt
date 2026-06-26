@@ -1,0 +1,29 @@
+# =====================================================================
+# marksheet-verifier  -  Python dependencies
+# =====================================================================
+# Install (with the project virtual environment active):
+#     pip install -r backend/requirements.txt
+#
+# Versions are pinned with ">=" lower bounds that are known to work with
+# Python 3.13 on Windows. Feel free to pin exact versions later for a
+# fully reproducible build.
+# ---------------------------------------------------------------------
+
+# --- Phase 1: command-line analyzer (REQUIRED now) -------------------
+pytesseract>=0.3.10        # Python wrapper around the Tesseract OCR engine
+opencv-python>=4.9.0       # image preprocessing (grayscale, threshold, etc.)
+PyMuPDF>=1.24.0            # render the first page of a PDF to an image (import name: fitz)
+Pillow>=10.2.0            # image loading/saving used by pytesseract and helpers
+numpy>=1.26.0             # numerical arrays (OpenCV images are numpy arrays)
+
+# --- Phase 2: FastAPI backend (REQUIRED now) -------------------------
+fastapi>=0.110.0           # the web framework
+uvicorn[standard]>=0.29.0  # the ASGI server that runs FastAPI
+python-multipart>=0.0.9    # required by FastAPI to receive file uploads
+# (pydantic is installed automatically as a FastAPI dependency)
+
+# --- Phase 6: metrics (added later) ----------------------------------
+# prometheus-client>=0.20.0
+
+# Note: Tesseract OCR and ExifTool are EXTERNAL programs, not pip packages.
+# They must be installed separately on your system (see README.md).

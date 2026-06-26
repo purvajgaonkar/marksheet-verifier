@@ -1,0 +1,52 @@
+# =====================================================================
+# marksheet-verifier  -  .gitignore
+# =====================================================================
+# PRIVACY FIRST: never commit real student documents, uploads, generated
+# reports, or forensic images. Only code and dummy/sample data belong in git.
+# ---------------------------------------------------------------------
+
+# --- Student data and generated outputs (NEVER commit) ---------------
+uploads/
+reports/
+forensic_outputs/
+
+# Keep the folders in git (so a fresh clone has them) but ignore contents.
+# To use this, create an empty `.gitkeep` file in each folder. The rules
+# above ignore everything; the lines below re-include the .gitkeep markers.
+!uploads/.gitkeep
+!reports/.gitkeep
+!forensic_outputs/.gitkeep
+
+# --- Python ----------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# --- Node / React (Phase 3) ------------------------------------------
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Editor / OS -----------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Secrets (do not commit API keys or .env files) ------------------
+.env
+.env.*
+*.key
+secrets.json
