@@ -49,6 +49,42 @@ def get_case(case_id: str) -> CaseSummary:
     return CaseSummary(**case)
 
 
+@router.get("/cases/{case_id}/agent-trace")
+def get_agent_trace(case_id: str) -> dict:
+    """
+    Return only the `agentic_workflow` section of a case's report (Phase 5).
+
+    Older reports created before Phase 5 have no agentic workflow, so we return
+    a friendly {"available": false, ...} object instead of erroring.
+    """
+    case = file_storage.get_case(config.CASES_INDEX_PATH, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"Case not found: {case_id}")
+
+    report_path = config.REPORTS_DIR / f"{case_id}_report.json"
+    if not report_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Report file missing for case {case_id}.",
+        )
+
+    try:
+        with open(report_path, "r", encoding="utf-8-sig") as fh:
+            report = json.load(fh)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Could not read report for {case_id}: {exc}"
+        ) from exc
+
+    workflow = report.get("agentic_workflow")
+    if not workflow or not workflow.get("available"):
+        return {
+            "available": False,
+            "message": "Agent trace is not available for this older report.",
+        }
+    return workflow
+
+
 @router.get("/reports/{case_id}")
 def get_report(case_id: str) -> dict:
     """
@@ -70,7 +106,7 @@ def get_report(case_id: str) -> dict:
         )
 
     try:
-        with open(report_path, "r", encoding="utf-8") as fh:
+        with open(report_path, "r", encoding="utf-8-sig") as fh:
             return json.load(fh)
     except (json.JSONDecodeError, OSError) as exc:
         raise HTTPException(

@@ -20,19 +20,20 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–3 complete (CLI + API + React UI)
+## Project status: Phases 1–5 complete (CLI + API + UI + forensics + agents)
 
 The project is built in phases. **Phase 1** is the offline command-line
-analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, and
-**Phase 3** adds a polished React + Vite dashboard. Later phases add deeper
-pixel forensics, an agent-style orchestrator, and metrics.
+analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
+adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
+forensics (weak signals only), and **Phase 5** reorganises the analysis as a
+local rule-based **agentic workflow**. Later phases add metrics and Docker.
 
 ```
                  Phase 1: CLI analyzer            ✅
                  Phase 2: FastAPI backend         ✅
-You are here ──► Phase 3: React frontend (Vite)   ✅
-                 Phase 4: Pixel/image forensics
-                 Phase 5: Agentic orchestration (local rules, no external AI)
+                 Phase 3: React frontend (Vite)   ✅
+                 Phase 4: Pixel/image forensics   ✅
+You are here ──► Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
                  Phase 6: /metrics endpoint for Prometheus/Grafana
                  Phase 7: Docker + Prometheus
 ```
@@ -210,6 +211,132 @@ You will get:
   the backend does not persist them yet.
 
 ---
+
+## Agentic orchestration (Phase 5)
+
+Phase 5 reorganises the analysis into a **local, rule-based agentic workflow** —
+no LLM, no external AI/API, fully offline. Each agent has one responsibility and
+**reuses the existing services**; an Orchestrator runs them in order and writes
+an `agentic_workflow` trace into the report.
+
+```
+Student Upload -> Orchestrator
+                  -> OCR Agent
+                  -> Metadata Agent
+                  -> Forensics Agent
+                  -> Rule Validation Agent
+                  -> Decision Agent
+                  -> Evidence Report -> Human Review
+```
+
+- **OCR Agent** — text, confidence, detected fields (reuses `ocr_service`).
+- **Metadata Agent** — ExifTool warning flags (reuses `metadata_service`).
+- **Forensics Agent** — Phase 4 anomaly score + visualizations (reuses `forensics_service`).
+- **Rule Validation Agent** — deterministic field checks (roll/total/percentage/result/board).
+- **Decision Agent** — aggregates evidence, calls `risk_service`, and produces a
+  non-accusatory recommendation + `human_review_required` flag.
+
+The Orchestrator assigns a `run_id`, records each agent's status / duration /
+findings / warnings, **continues even if a weak agent fails**, and only aborts on
+critical input failures (missing file, missing Tesseract, PDF/preprocess error).
+
+**Why no API key is required:** the agents are plain Python rule modules reusing
+local tools (Tesseract, ExifTool, OpenCV, Pillow, NumPy, PyMuPDF). No
+Claude/OpenAI/Gemini/Hugging Face/DigiLocker API is called. *(Claude Code, used
+to build this project, is separate from the project's runtime and needs no
+project API key.)*
+
+**New route:** `GET /cases/{case_id}/agent-trace` returns just the
+`agentic_workflow` section (or `{ "available": false, ... }` for older reports).
+
+**In the UI:** the Case Detail page shows an **"Agentic Workflow Trace"** panel
+with the run ID, mode (`local_rule_based`), duration, agent count, the
+human-review recommendation, and a timeline card per agent (status, duration,
+findings, warnings, errors). The Admin Dashboard header shows cases needing human
+review and the average OCR confidence.
+
+### Test Phase 5
+
+```powershell
+# A) Command-line analyzer (now runs the local agent workflow)
+python backend/analyze.py uploads/dummy_marksheet.png
+python backend/analyze.py uploads/dummy_marksheet_pdf.pdf
+#    -> prints each agent (OCR/Metadata/Forensics/Rule Validation/Decision)
+
+# B) Backend + Swagger: upload, then read the agent trace
+python -m uvicorn app.main:app --reload --app-dir backend
+#    open http://127.0.0.1:8000/docs -> POST /upload -> copy case_id
+#    then GET /cases/{case_id}/agent-trace
+
+# C) Frontend: open a case -> "Agentic Workflow Trace"
+cd frontend
+npm run dev
+```
+
+> **Agentic AI limitation:** these agents are local rule-based modules. They
+> produce *evidence summaries*, not proof, and never make the final admission
+> decision — a human does. See
+> [docs/ETHICS_AND_LIMITATIONS.md](docs/ETHICS_AND_LIMITATIONS.md) →
+> *"Agentic AI Limitations"*.
+
+## Image forensics (Phase 4)
+
+Phase 4 adds **local pixel/image forensics** using only OpenCV, Pillow, NumPy,
+and PyMuPDF — no ML models, no GPU, no cloud. Forensics runs automatically as
+part of every analysis (CLI and `/upload`) and adds an `image_forensics` block
+to the report.
+
+**Signals generated** (all *weak evidence only*):
+- **ELA difference** — Error-Level-Analysis-style recompression view
+- **Edge density** — Canny edge map (informational context)
+- **Sharpness inconsistency** — local sharpness/blur map
+- **Noise inconsistency** — local noise residual map
+- **Anomaly heatmap** — the weak signals combined and overlaid on the page
+
+**Where outputs are stored:** one folder per case —
+`forensic_outputs/<case_id>/` containing `normalized.png`, `ela.png`,
+`edge_map.png`, `sharpness_map.png`, `noise_map.png`, `anomaly_heatmap.png`.
+
+**How risk is affected:** a single `anomaly_score` (0–1) is computed and can add
+**at most +0.20** to the overall risk score (bands: >0.75 → +0.20, >0.50 →
++0.12, >0.30 → +0.06, else +0.00). Forensics can *nudge* but never *drive* the
+score, and OCR/metadata/field checks remain more important. If forensics fails,
+the report records `"available": false` and analysis continues normally.
+
+**New backend routes:**
+- `GET /forensics/{case_id}` — list the available forensic image URLs for a case.
+- `GET /forensic-files/{case_id}/{filename}` — serve one forensic image
+  (only `.png/.jpg/.jpeg`, only from inside that case's folder, path-traversal safe).
+
+**In the UI:** the **Case Detail** page shows an *Image Forensics Signals* panel
+with the anomaly score, per-signal meters, the six visualizations, and a clear
+limitations note. Older reports without forensics degrade gracefully.
+
+> ⚠️ **Pixel forensics are weak signals only.** Compression, scanning, mobile
+> capture, screenshots, WhatsApp forwarding, and PDF conversion can all create
+> false positives. See [docs/ETHICS_AND_LIMITATIONS.md](docs/ETHICS_AND_LIMITATIONS.md)
+> → *"Limitations of Pixel-Level Forensics"*. These visualizations are review
+> aids and do **not** prove tampering.
+
+### Test Phase 4
+
+```powershell
+# A) Command-line analyzer (now also generates image_forensics)
+python backend/analyze.py uploads/dummy_marksheet.png
+python backend/analyze.py uploads/dummy_marksheet_pdf.pdf
+#    -> see "Forensics anomaly" in the summary; images appear in
+#       forensic_outputs/<name>/
+
+# B) Backend + Swagger: upload a file, then call the forensics route
+python -m uvicorn app.main:app --reload --app-dir backend
+#    open http://127.0.0.1:8000/docs  -> POST /upload  -> copy the case_id
+#    then GET /forensics/{case_id}
+
+# C) Frontend: open a case and scroll to "Image Forensics Signals"
+cd frontend
+npm run dev
+#    open http://localhost:5173 -> upload -> View full report
+```
 
 ## Frontend (Phase 3) at a glance
 

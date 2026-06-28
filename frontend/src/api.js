@@ -66,3 +66,25 @@ export async function getReport(caseId) {
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
+
+/**
+ * GET /forensics/{caseId} -> the available forensic image URLs for a case.
+ * Returns { case_id, available, outputs: { ela_image: <url>, ... } }.
+ */
+export async function getForensics(caseId) {
+  const response = await fetch(`${API_BASE_URL}/forensics/${encodeURIComponent(caseId)}`);
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
+ * GET /cases/{caseId}/agent-trace -> the agentic_workflow section for a case
+ * (Phase 5). For older reports it returns { available: false, message }.
+ * The CaseDetail page already has this data from the full report, so this is
+ * provided mainly for the dedicated endpoint / standalone use.
+ */
+export async function getAgentTrace(caseId) {
+  const response = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/agent-trace`);
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}

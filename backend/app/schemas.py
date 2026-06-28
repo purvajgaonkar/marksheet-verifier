@@ -42,6 +42,7 @@ class UploadResponse(BaseModel):
     risk_score: Optional[float] = None
     risk_label: str
     ocr_confidence: Optional[float] = None
+    forensics_anomaly_score: Optional[float] = None
     report_path: str
     disclaimer: str
 
@@ -56,6 +57,7 @@ class CaseSummary(BaseModel):
     risk_score: Optional[float] = None
     risk_label: Optional[str] = None
     ocr_confidence: Optional[float] = None
+    forensics_anomaly_score: Optional[float] = None
     status: Optional[str] = None
     report_path: Optional[str] = None
 

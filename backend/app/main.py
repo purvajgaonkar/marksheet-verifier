@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
-from app.routes import case_routes, health_routes, upload_routes
+from app.routes import case_routes, forensic_routes, health_routes, upload_routes
 from app.schemas import RootResponse
 from app.services.report_service import MVP_DISCLAIMER
 
@@ -85,3 +85,4 @@ def root() -> RootResponse:
 app.include_router(health_routes.router)
 app.include_router(upload_routes.router)
 app.include_router(case_routes.router)
+app.include_router(forensic_routes.router)

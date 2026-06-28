@@ -93,7 +93,9 @@ def load_cases_index(cases_index_path: str | Path) -> list[dict]:
     if not cases_index_path.is_file():
         return []
     try:
-        with open(cases_index_path, "r", encoding="utf-8") as fh:
+        # utf-8-sig tolerates a BOM, which Windows editors (and PowerShell's
+        # Set-Content -Encoding utf8) can prepend. Plain utf-8 would choke on it.
+        with open(cases_index_path, "r", encoding="utf-8-sig") as fh:
             data = json.load(fh)
     except (json.JSONDecodeError, OSError):
         return []

@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import RiskBadge, { getRiskMeta } from "../components/RiskBadge";
 import ReportSection from "../components/ReportSection";
+import ForensicsPanel from "../components/ForensicsPanel";
+import AgentTracePanel from "../components/AgentTracePanel";
 import ErrorState from "../components/ErrorState";
 import { Skeleton } from "../components/Skeleton";
 import { getReport } from "../api";
@@ -242,6 +244,9 @@ export default function CaseDetail() {
         </p>
       </div>
 
+      {/* Agentic workflow trace (Phase 5) */}
+      <AgentTracePanel workflow={report.agentic_workflow} />
+
       {/* Reviewer actions */}
       <ReportSection title="Reviewer decision" Icon={ClipboardCheck}>
         <p className="text-sm text-slate-500">
@@ -322,6 +327,9 @@ export default function CaseDetail() {
           </ul>
         </ReportSection>
       )}
+
+      {/* Image / pixel forensics (Phase 4) */}
+      <ForensicsPanel forensics={report.image_forensics} caseId={report.case_id || caseId} />
 
       {/* OCR text preview */}
       <ReportSection title="OCR text preview" Icon={ScanText}>

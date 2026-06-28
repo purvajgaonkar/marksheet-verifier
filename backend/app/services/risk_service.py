@@ -56,6 +56,29 @@ _UNKNOWN_BOARD_PENALTY = 0.10
 _OCR_LOW_PENALTY = 0.15
 _OCR_VERY_LOW_PENALTY = 0.30
 
+# Maximum the image forensics can ever add to the risk score. Forensics are
+# WEAK evidence, so they are capped well below the OCR/metadata contributions
+# and must never dominate the final score.
+_FORENSICS_MAX_CONTRIBUTION = 0.20
+
+
+def forensics_contribution(anomaly_score: float | None) -> float:
+    """
+    Map a 0..1 forensics anomaly score to a small, capped risk contribution.
+
+    The bands are deliberately conservative and top out at 0.20 so that pixel
+    signals can nudge — but never drive — the overall risk.
+    """
+    if anomaly_score is None:
+        return 0.0
+    if anomaly_score > 0.75:
+        return _FORENSICS_MAX_CONTRIBUTION  # 0.20
+    if anomaly_score > 0.50:
+        return 0.12
+    if anomaly_score > 0.30:
+        return 0.06
+    return 0.0
+
 
 def _label_for_score(score: float) -> str:
     """
@@ -77,6 +100,7 @@ def compute_risk(
     metadata_flags: dict,
     ocr_result: dict,
     fields: dict,
+    forensics: dict | None = None,
 ) -> dict:
     """
     Combine all evidence into a risk score and label.
@@ -86,6 +110,9 @@ def compute_risk(
     metadata_flags : output of metadata_service.analyze_metadata_flags()
     ocr_result     : output of ocr_service.extract_text_with_confidence()
     fields         : output of ocr_service.detect_fields()
+    forensics      : output of forensics_service.run_forensics() (optional).
+                     Only used when forensics["available"] is True, and capped
+                     at +0.20 so it never dominates the score.
 
     Returns
     -------
@@ -157,6 +184,17 @@ def compute_risk(
             f"Examination board could not be identified (added "
             f"{_UNKNOWN_BOARD_PENALTY:.2f})."
         )
+
+    # ---- Image-forensics contribution (weak signal, capped at +0.20) ----
+    if forensics and forensics.get("available"):
+        anomaly = forensics.get("anomaly_score", 0.0)
+        contrib = forensics_contribution(anomaly)
+        if contrib > 0:
+            score += contrib
+            factors.append(
+                f"Image-forensics anomaly score {anomaly} added {contrib:.2f} "
+                f"(weak pixel signal, capped)."
+            )
 
     # ---- Clamp to [0, 1] and label --------------------------------------
     score = max(0.0, min(1.0, score))

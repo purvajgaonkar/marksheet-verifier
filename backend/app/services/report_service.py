@@ -36,6 +36,8 @@ def build_report(
     preprocess_info: dict,
     pdf_page_count: Optional[int] = None,
     raw_metadata: Optional[dict] = None,
+    image_forensics: Optional[dict] = None,
+    agentic_workflow: Optional[dict] = None,
 ) -> dict:
     """
     Build the full report dictionary from all the pieces of evidence.
@@ -89,6 +91,27 @@ def build_report(
             "final_height": preprocess_info.get("height"),
             "debug_images": preprocess_info.get("steps", {}),
         },
+        # Image/pixel forensics (Phase 4). Always present; "available" is False
+        # when forensics could not run, so older code/UIs degrade gracefully.
+        "image_forensics": image_forensics
+        or {
+            "available": False,
+            "summary": "Image forensics was not run for this report.",
+            "anomaly_score": 0.0,
+            "risk_contribution": 0.0,
+            "limitations": [],
+            "signals": [],
+            "outputs": {},
+        },
+        # Agentic workflow trace (Phase 5). "available" is False on older reports
+        # / when the orchestrator was not used, so the UI degrades gracefully.
+        "agentic_workflow": agentic_workflow
+        or {
+            "available": False,
+            "mode": "local_rule_based",
+            "summary": "Agentic workflow was not run for this report.",
+            "trace": [],
+        },
         "notes": [
             MVP_DISCLAIMER,
             "Risk labels (verified/low/medium/needs_review/high/unable_to_verify) "
@@ -125,6 +148,7 @@ def print_summary(report: dict, report_path: str | Path) -> None:
     ocr = report.get("ocr", {})
     fields = report.get("detected_fields", {})
     flags = report.get("metadata", {}).get("flags", [])
+    forensics = report.get("image_forensics", {})
 
     line = "=" * 60
     print("\n" + line)
@@ -144,6 +168,12 @@ def print_summary(report: dict, report_path: str | Path) -> None:
         print(f"  Metadata flags   : {', '.join(flags)}")
     else:
         print("  Metadata flags   : none")
+
+    if forensics.get("available"):
+        print(f"  Forensics anomaly: {forensics.get('anomaly_score')} "
+              f"(weak pixel signal, max +{forensics.get('risk_contribution')} to risk)")
+    else:
+        print("  Forensics anomaly: not available")
 
     print(line)
     print(f"  NOTE: {MVP_DISCLAIMER}")

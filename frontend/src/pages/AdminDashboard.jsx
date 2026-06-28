@@ -20,12 +20,19 @@ import { buttonVariants, cn, formatDateTime } from "../lib/utils";
 // Group risk labels into the four dashboard buckets.
 function summarise(cases) {
   const counts = { total: cases.length, low: 0, review: 0, high: 0 };
+  let ocrSum = 0;
+  let ocrCount = 0;
   for (const c of cases) {
     const label = c.risk_label;
     if (label === "verified" || label === "low") counts.low += 1;
     else if (label === "medium" || label === "needs_review") counts.review += 1;
     else if (label === "high") counts.high += 1;
+    if (typeof c.ocr_confidence === "number") {
+      ocrSum += c.ocr_confidence;
+      ocrCount += 1;
+    }
   }
+  counts.avgOcr = ocrCount ? Math.round((ocrSum / ocrCount) * 10) / 10 : null;
   return counts;
 }
 
@@ -87,6 +94,15 @@ export default function AdminDashboard() {
           <h2 className="text-xl font-semibold text-slate-900">Admin Dashboard</h2>
           <p className="mt-1 text-sm text-slate-500">
             Review uploaded marksheets and their risk signals.
+            {counts.review + counts.high > 0 && (
+              <span className="text-slate-400">
+                {" "}· {counts.review + counts.high} case
+                {counts.review + counts.high === 1 ? "" : "s"} for human review
+              </span>
+            )}
+            {counts.avgOcr != null && (
+              <span className="text-slate-400"> · Avg OCR confidence {counts.avgOcr}/100</span>
+            )}
             {refreshedAt && (
               <span className="text-slate-400"> · Updated {formatDateTime(refreshedAt)}</span>
             )}

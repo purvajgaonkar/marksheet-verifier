@@ -105,6 +105,8 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
     # --- Record the case in the local JSON "database" --------------------
     risk = report.get("risk", {})
     ocr = report.get("ocr", {})
+    forensics = report.get("image_forensics", {})
+    forensics_score = forensics.get("anomaly_score") if forensics.get("available") else None
     case_entry = {
         "case_id": case_id,
         "filename": file.filename,
@@ -115,6 +117,7 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
         "risk_score": risk.get("score"),
         "risk_label": risk.get("label"),
         "ocr_confidence": ocr.get("average_confidence"),
+        "forensics_anomaly_score": forensics_score,
         # Reviewer status (used by the Phase 3 dashboard). Starts as pending.
         "status": "pending_review",
         "report_path": f"reports/{report_path.name}",
@@ -128,6 +131,7 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
         risk_score=risk.get("score"),
         risk_label=risk.get("label", "unable_to_verify"),
         ocr_confidence=ocr.get("average_confidence"),
+        forensics_anomaly_score=forensics_score,
         report_path=case_entry["report_path"],
         disclaimer=MVP_DISCLAIMER,
     )
