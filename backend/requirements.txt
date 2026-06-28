@@ -26,7 +26,11 @@ python-multipart>=0.0.9    # required by FastAPI to receive file uploads
 scikit-learn>=1.5.0        # local TF-IDF retrieval over docs/ (no external API)
 # (numpy/scipy are pulled in automatically by scikit-learn)
 
-# --- Phase 7: metrics (added later) ----------------------------------
+# --- Phase 7: optional Claude API mode (REQUIRED now) ----------------
+anthropic>=0.40.0          # official Anthropic SDK (only used when LLM_ENABLED=true)
+python-dotenv>=1.0.0       # load backend/.env (API key etc.) — keys never hardcoded
+
+# --- Phase 8: metrics (added later) ----------------------------------
 # prometheus-client>=0.20.0
 
 # Note: Tesseract OCR and ExifTool are EXTERNAL programs, not pip packages.

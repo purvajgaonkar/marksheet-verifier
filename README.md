@@ -20,14 +20,15 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–6 complete (CLI + API + UI + forensics + agents + RAG)
+## Project status: Phases 1–7 complete (CLI + API + UI + forensics + agents + RAG + optional Claude)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
 adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
 forensics (weak signals only), **Phase 5** reorganises the analysis as a local
-rule-based **agentic workflow**, and **Phase 6** adds a local **RAG policy
-assistant**. Later phases add metrics and Docker.
+rule-based **agentic workflow**, **Phase 6** adds a local **RAG policy
+assistant**, and **Phase 7** adds an **optional Claude API** answer mode (the app
+still runs fully locally without any key). Later phases add metrics and Docker.
 
 ```
                  Phase 1: CLI analyzer            ✅
@@ -35,9 +36,10 @@ assistant**. Later phases add metrics and Docker.
                  Phase 3: React frontend (Vite)   ✅
                  Phase 4: Pixel/image forensics   ✅
                  Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
-You are here ──► Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
-                 Phase 7: /metrics endpoint for Prometheus/Grafana
-                 Phase 8: Docker + Prometheus
+                 Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
+You are here ──► Phase 7: Optional Claude API     ✅  (key optional; local fallback)
+                 Phase 8: /metrics endpoint for Prometheus/Grafana
+                 Phase 9: Docker + Prometheus
 ```
 
 ## Quick start (full stack)
@@ -213,6 +215,103 @@ You will get:
   the backend does not persist them yet.
 
 ---
+
+## Optional Claude API mode (Phase 7)
+
+Phase 7 adds an **optional** Claude-powered answer mode on top of the Phase 6
+local RAG. It uses Claude to phrase a better, source-grounded answer from the
+**same** retrieved policy chunks — it does **not** make decisions.
+
+**The app works in two modes:**
+- **Local fallback (default):** no key, or `LLM_ENABLED=false` → the Phase 6
+  local template answers (`mode: local_retrieval_template`).
+- **Claude RAG:** `LLM_ENABLED=true` **and** a valid `ANTHROPIC_API_KEY` → Claude
+  phrases the answer (`mode: claude_rag`). If the call fails for any reason, it
+  falls back automatically (`mode: local_retrieval_template_fallback`).
+
+**Why the API key is optional:** everything works without it. Claude is a
+convenience layer; the local fallback always remains.
+
+**Security & privacy (important):**
+- The key is read **only** from `backend/.env` via `python-dotenv` — never
+  hardcoded, never committed, never returned by any endpoint.
+- OCR text and the reviewer's question are treated as **untrusted** input; the
+  system prompt tells Claude to ignore embedded instructions and forbids
+  accusatory wording. Claude **cannot** change the risk score, status, reports,
+  or any reviewer decision — it produces an explanation only.
+
+### How to create `backend/.env`
+
+```powershell
+# from the project root
+Copy-Item backend\.env.example backend\.env
+# then edit backend\.env and set:
+#   ANTHROPIC_API_KEY=sk-ant-...        (your real key)
+#   ANTHROPIC_MODEL=claude-sonnet-4-6   (a CURRENT id; the old 3.5 alias is retired)
+#   LLM_ENABLED=true
+#   LLM_MAX_TOKENS=900
+```
+
+> **Do not commit `backend/.env`.** It is git-ignored. Only `backend/.env.example`
+> (which has no secret) is committed.
+>
+> **Model note:** use a current model id such as `claude-sonnet-4-6` (balanced),
+> `claude-haiku-4-5` (cheap/fast), or `claude-opus-4-8` (most capable). The older
+> `claude-3-5-sonnet-latest` alias is **retired** and returns a 404 (the app then
+> falls back to local answers and reports the error).
+
+### New endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/rag/llm-status` | `{ llm_enabled, api_key_configured, model, mode }` (no key) |
+| `POST` | `/cases/{case_id}/explain` | Source-grounded case explanation (Claude or fallback) |
+
+`POST /rag/ask` now also returns `mode`, `model`, `llm_available`, `llm_error`.
+
+### In the UI
+
+- **Policy Assistant** (`/assistant`): a **"Check LLM Status"** button and a status
+  chip (Claude RAG · model / Local fallback), plus a **mode badge** on every
+  answer.
+- **Case Detail**: a **"Generate LLM Explanation"** button that shows the
+  explanation, mode badge, sources used, and limitations.
+
+### Test Phase 7
+
+```powershell
+# A) Install requirements (adds anthropic + python-dotenv)
+python -m pip install -r backend/requirements.txt
+
+# B) Create backend/.env (see above), then start the backend from the project root
+python -m uvicorn app.main:app --reload --app-dir backend
+
+# C) LLM status
+curl.exe http://127.0.0.1:8000/rag/llm-status
+
+# D) Ask (PowerShell — avoids JSON-escaping pain)
+$body = @{ question = "Are pixel forensics proof of tampering?" } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/rag/ask" -Method POST -ContentType "application/json" -Body $body
+
+# E) Ask about a case (paste a real case id from GET /cases)
+$body = @{ question = "Explain this case for a reviewer."; case_id = "PASTE_CASE_ID" } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/rag/ask" -Method POST -ContentType "application/json" -Body $body
+
+# F) Generate a case explanation
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/cases/PASTE_CASE_ID/explain" -Method POST
+
+# G) Frontend
+cd frontend
+npm run dev
+```
+
+When a valid key + `LLM_ENABLED=true` are set, the answers show **mode: claude_rag**
+and the model name; otherwise they show **local fallback**.
+
+> **LLM explanation limitation:** Claude can be imperfect, cannot confirm fraud,
+> and never makes the final decision — see
+> [docs/ETHICS_AND_LIMITATIONS.md](docs/ETHICS_AND_LIMITATIONS.md) →
+> *"LLM Explanation Limitations"*.
 
 ## RAG policy assistant (Phase 6)
 

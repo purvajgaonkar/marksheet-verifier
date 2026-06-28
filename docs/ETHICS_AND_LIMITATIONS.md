@@ -134,6 +134,31 @@ external API). Use it as guidance, with these limits in mind:
 
 ---
 
+## LLM Explanation Limitations
+
+Phase 7 adds an **optional** Claude-powered explanation mode. When enabled, Claude
+rephrases answers from the same retrieved policy context the local fallback uses.
+It is convenience only, and these limits apply:
+
+- **LLM explanations may be imperfect.** A language model can phrase things
+  unclearly, omit a nuance, or over-summarise. Read the cited sources.
+- **The LLM cannot confirm fraud.** It must not, and is instructed not to, call a
+  document fake or forged or accuse a student. It explains weak risk signals only.
+- **The LLM does not make final admission decisions.** It produces an explanation;
+  a human reviewer decides.
+- **It must use retrieved policy context and case evidence.** The system prompt
+  forbids inventing policy and asks it to name the source documents it used.
+- **The human reviewer is responsible for the final interpretation.** Treat the
+  explanation as a starting point, not an authority.
+- **Prompt-injection risk exists and is mitigated.** OCR text and the reviewer's
+  question are treated as UNTRUSTED data, not instructions. The model is told to
+  ignore any embedded instruction that tries to change its rules, the risk score,
+  or the case status, and it cannot modify any stored data or decision.
+- **No API key is required.** With no key (or the switch off), the app uses the
+  local fallback — the LLM is never a hard dependency.
+
+---
+
 ## Summary
 
 | Signal | Strength | Can be wrong because… |

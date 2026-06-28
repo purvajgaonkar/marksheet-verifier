@@ -34,6 +34,15 @@ def sources() -> dict:
     return rag_service.get_sources()
 
 
+@router.get("/rag/llm-status")
+def llm_status() -> dict:
+    """
+    Report whether the optional Claude API mode is active (Phase 7).
+    Never exposes the API key — only whether one is configured.
+    """
+    return rag_service.get_llm_status()
+
+
 @router.post("/rag/reindex")
 def reindex() -> dict:
     """Rebuild the in-memory index from docs/ (use after editing the docs)."""

@@ -22,7 +22,7 @@ import re
 
 from app import config
 from app.rag.knowledge_base import get_knowledge_base
-from app.services import retrieval_service
+from app.services import claude_service, retrieval_service
 
 MODE = "local_retrieval_template"
 
@@ -79,11 +79,62 @@ def reindex() -> dict:
     return get_knowledge_base().reindex()
 
 
+def get_llm_status() -> dict:
+    """
+    Report whether the optional Claude API mode is on (for GET /rag/llm-status).
+    NEVER exposes the API key — only whether one is configured.
+    """
+    available = config.llm_is_available()
+    return {
+        "llm_enabled": config.LLM_ENABLED,
+        "api_key_configured": bool(config.ANTHROPIC_API_KEY),
+        "model": config.ANTHROPIC_MODEL,
+        "mode": "claude_rag" if available else "local_fallback",
+    }
+
+
+def _generate(question: str, chunks: list[dict], case_summary: dict | None) -> dict:
+    """
+    Produce the answer text. Uses Claude when LLM mode is on AND the call
+    succeeds; otherwise falls back to the local extractive/template answer.
+
+    Returns {answer, mode, model, llm_available, llm_error}.
+    """
+    # Local fallback path (default, and whenever the LLM is off).
+    if not config.llm_is_available():
+        return {
+            "answer": _compose_answer(question, chunks, case_summary),
+            "mode": "local_retrieval_template",
+            "model": None,
+            "llm_available": False,
+            "llm_error": None,
+        }
+
+    # Claude path — pass the SAME retrieved chunks (with full text) for grounding.
+    claude = claude_service.generate_claude_rag_answer(question, chunks, case_summary)
+    if claude.get("available"):
+        return {
+            "answer": claude["answer"],
+            "mode": "claude_rag",
+            "model": claude.get("model", config.ANTHROPIC_MODEL),
+            "llm_available": True,
+            "llm_error": None,
+        }
+
+    # Claude failed -> graceful local fallback, but report the error.
+    return {
+        "answer": _compose_answer(question, chunks, case_summary),
+        "mode": "local_retrieval_template_fallback",
+        "model": None,
+        "llm_available": False,
+        "llm_error": claude.get("error"),
+    }
+
+
 def answer_question(question: str, case_id: str | None = None) -> dict:
     """
-    Answer a reviewer question using local policy docs, optionally case-aware.
-
-    Returns the structured response described in the Phase 6 spec.
+    Answer a reviewer question using local policy docs, optionally case-aware,
+    and optionally phrased by Claude when LLM mode is enabled.
     """
     question = (question or "").strip()
     if not question:
@@ -92,7 +143,10 @@ def answer_question(question: str, case_id: str | None = None) -> dict:
             "answer": "Please enter a question for the policy assistant.",
             "sources": [],
             "case_summary": None,
-            "mode": MODE,
+            "mode": "local_retrieval_template",
+            "model": None,
+            "llm_available": config.llm_is_available(),
+            "llm_error": None,
             "limitations": list(LIMITATIONS),
         }
 
@@ -101,7 +155,7 @@ def answer_question(question: str, case_id: str | None = None) -> dict:
     kb = get_knowledge_base()
     chunks = kb.search(question, top_k=_TOP_K)
 
-    answer = _compose_answer(question, chunks, case_summary)
+    gen = _generate(question, chunks, case_summary)
 
     sources = [
         {"document": c["document"], "chunk_id": c["chunk_id"], "preview": c["preview"]}
@@ -110,10 +164,52 @@ def answer_question(question: str, case_id: str | None = None) -> dict:
 
     return {
         "question": question,
-        "answer": answer,
+        "answer": gen["answer"],
         "sources": sources,
         "case_summary": case_summary,
-        "mode": MODE,
+        "mode": gen["mode"],
+        "model": gen["model"],
+        "llm_available": gen["llm_available"],
+        "llm_error": gen["llm_error"],
+        "limitations": list(LIMITATIONS),
+    }
+
+
+# A single, focused question used to generate a full case explanation.
+_EXPLAIN_QUESTION = (
+    "Explain this case for a university reviewer. Cover the risk label and risk "
+    "score, the OCR confidence, any metadata warnings, the image-forensics "
+    "anomaly score, a short summary of the agentic workflow, recommended next "
+    "steps, and the limitations of these signals."
+)
+
+
+def explain_case(case_id: str) -> dict:
+    """
+    Generate a source-grounded explanation of a specific case (for
+    POST /cases/{case_id}/explain). Uses Claude when enabled, else local fallback.
+    """
+    case_summary = _load_case_summary(case_id)
+
+    kb = get_knowledge_base()
+    chunks = kb.search(_EXPLAIN_QUESTION, top_k=_TOP_K)
+
+    gen = _generate(_EXPLAIN_QUESTION, chunks, case_summary)
+
+    sources = [
+        {"document": c["document"], "chunk_id": c["chunk_id"], "preview": c["preview"]}
+        for c in chunks
+    ]
+
+    return {
+        "case_id": case_id,
+        "mode": gen["mode"],
+        "model": gen["model"],
+        "explanation": gen["answer"],
+        "case_summary": case_summary,
+        "sources": sources,
+        "llm_available": gen["llm_available"],
+        "llm_error": gen["llm_error"],
         "limitations": list(LIMITATIONS),
     }
 
@@ -152,6 +248,7 @@ def _load_case_summary(case_id: str) -> dict | None:
 
     flags = metadata.get("flags", []) or []
     anomaly = forensics.get("anomaly_score") if forensics.get("available") else None
+    agents_executed = workflow.get("agents_executed") if isinstance(workflow, dict) else None
 
     return {
         "case_id": case_id,
@@ -162,6 +259,7 @@ def _load_case_summary(case_id: str) -> dict | None:
         "metadata_flag_count": len(flags),
         "metadata_flags": flags,
         "forensics_anomaly_score": anomaly,
+        "agents_executed": agents_executed,
         "human_review_required": recommendation.get("human_review_required"),
         "recommendation": recommendation.get("recommendation"),
         "contributing_factors": risk.get("contributing_factors", []),

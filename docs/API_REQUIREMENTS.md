@@ -56,5 +56,47 @@ documents in `docs/`.
 | `POST` | `/rag/reindex` | Rebuild the in-memory index from `docs/` |
 
 `POST /rag/ask` accepts `{ "question": "...", "case_id": "optional" }` and returns
-an answer, the source chunks used, a `mode` of `local_retrieval_template`, and a
-list of limitations.
+an answer, the source chunks used, a `mode`, and a list of limitations.
+
+---
+
+## Phase 7 Claude API Requirements
+
+Phase 7 adds an **optional** Claude-powered answer mode on top of the same local
+retrieval. The app still runs fully without it.
+
+- **`ANTHROPIC_API_KEY` is OPTIONAL for the local fallback, but REQUIRED for the
+  Claude-powered mode.** With no key (or `LLM_ENABLED=false`), the assistant uses
+  the Phase 6 local template answers (`mode: local_retrieval_template`).
+- **The API key must be stored in `backend/.env`** (loaded with `python-dotenv`).
+  Copy `backend/.env.example` to `backend/.env` and fill it in.
+- **Never hardcode or commit keys.** `backend/.env` is git-ignored; only
+  `backend/.env.example` (which has no secret) is committed. The key is read from
+  the environment and is never returned by any endpoint.
+- **Claude is used for EXPLANATION only, not decisions.** It rephrases answers
+  from the retrieved policy context; it cannot change the risk score, status,
+  reports, or any reviewer decision.
+
+### Environment variables (`backend/.env`)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ANTHROPIC_API_KEY` | _(empty)_ | Your Anthropic key. Empty = local fallback. |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Model id. Use a **current** id (e.g. `claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-opus-4-8`). The old `claude-3-5-sonnet-latest` is retired and returns 404. |
+| `LLM_ENABLED` | `false` | Master switch. `true` + a valid key enables Claude mode. |
+| `LLM_MAX_TOKENS` | `900` | Max tokens Claude may generate per answer. |
+
+### Phase 7 endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/rag/llm-status` | Report `{ llm_enabled, api_key_configured, model, mode }` (no key exposed) |
+| `POST` | `/cases/{case_id}/explain` | Source-grounded explanation of a case (Claude or local fallback) |
+
+`POST /rag/ask` now also returns `mode` (`claude_rag` / `local_retrieval_template`
+/ `local_retrieval_template_fallback`), `model`, `llm_available`, and `llm_error`.
+
+**Fallback behaviour:** if `LLM_ENABLED=true` but the Claude call fails (bad key,
+no credits, wrong model, network error), the request does **not** fail — it falls
+back to the local answer with `mode: local_retrieval_template_fallback` and an
+`llm_error` describing the problem.

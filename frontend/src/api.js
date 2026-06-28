@@ -109,6 +109,30 @@ export async function reindexRag() {
 }
 
 /**
+ * GET /rag/llm-status -> { llm_enabled, api_key_configured, model, mode } (Phase 7).
+ * Reports whether the optional Claude API mode is active. Never returns the key.
+ */
+export async function getLlmStatus() {
+  const response = await fetch(`${API_BASE_URL}/rag/llm-status`);
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
+ * POST /cases/{caseId}/explain -> a source-grounded explanation of a case (Phase 7).
+ * Uses Claude when enabled, otherwise the local fallback. Returns
+ * { case_id, mode, model, explanation, sources, limitations, llm_available, llm_error }.
+ */
+export async function generateCaseExplanation(caseId) {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/explain`,
+    { method: "POST" }
+  );
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
  * GET /cases/{caseId}/agent-trace -> the agentic_workflow section for a case
  * (Phase 5). For older reports it returns { available: false, message }.
  * The CaseDetail page already has this data from the full report, so this is

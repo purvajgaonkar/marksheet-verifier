@@ -15,6 +15,7 @@ you launch the program from (important on Windows).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -36,6 +37,53 @@ DOCS_DIR = PROJECT_ROOT / "docs"
 
 # The tiny local "database": a JSON file listing every case.
 CASES_INDEX_PATH = REPORTS_DIR / "cases_index.json"
+
+# ---------------------------------------------------------------------------
+# Phase 7: optional Claude API mode.
+# ---------------------------------------------------------------------------
+# We load environment variables from backend/.env using python-dotenv. Real
+# environment variables (already set in the shell) take precedence over the
+# file, which is the standard, safe behaviour.
+#
+# IMPORTANT: the API key is read from the environment only. It is NEVER
+# hardcoded here and NEVER printed/exposed by the API.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BACKEND_DIR / ".env")
+except Exception:  # noqa: BLE001 - dotenv is optional; missing it just means no .env
+    pass
+
+
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    """Parse a boolean-ish env string safely ('true'/'1'/'yes'/'on' -> True)."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+ANTHROPIC_API_KEY = (os.getenv("ANTHROPIC_API_KEY", "") or "").strip()
+# Default to a current, valid model. (The older "claude-3-5-sonnet-latest" alias
+# is retired and returns 404; claude-sonnet-4-6 is its current equivalent.)
+ANTHROPIC_MODEL = (os.getenv("ANTHROPIC_MODEL", "") or "").strip() or "claude-sonnet-4-6"
+LLM_ENABLED = _parse_bool(os.getenv("LLM_ENABLED"), default=False)
+
+try:
+    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "900"))
+except (TypeError, ValueError):
+    LLM_MAX_TOKENS = 900
+
+# A placeholder value should count as "no key" so the example file is harmless.
+if ANTHROPIC_API_KEY in {"", "your_anthropic_api_key_here"}:
+    ANTHROPIC_API_KEY = ""
+
+
+def llm_is_available() -> bool:
+    """
+    True only when BOTH the master switch is on AND a non-empty API key exists.
+    When False, the app uses the local retrieval fallback (Phase 6).
+    """
+    return bool(LLM_ENABLED and ANTHROPIC_API_KEY)
 
 # ---------------------------------------------------------------------------
 # Accepted uploads

@@ -10,9 +10,12 @@ import {
   FileText,
   MessageSquareText,
   User,
+  ServerCog,
+  AlertTriangle,
 } from "lucide-react";
 import RiskBadge from "../components/RiskBadge";
-import { askPolicyAssistant, getRagSources, getCases } from "../api";
+import ModeBadge from "../components/ModeBadge";
+import { askPolicyAssistant, getRagSources, getCases, getLlmStatus } from "../api";
 import { buttonVariants, cn } from "../lib/utils";
 
 const STARTER_QUESTIONS = [
@@ -46,17 +49,22 @@ function AnswerCard({ turn }) {
   const r = turn.response;
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
           <Sparkles className="h-4 w-4" />
         </span>
         <span className="text-sm font-semibold text-slate-900">Policy Assistant</span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-          {r.mode || "local_retrieval_template"}
-        </span>
+        <ModeBadge mode={r.mode} model={r.model} />
       </div>
 
-      <p className="mt-3 text-sm leading-relaxed text-slate-700">{r.answer}</p>
+      {r.llm_error && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Claude was unavailable, so this used the local fallback. ({r.llm_error})
+        </p>
+      )}
+
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{r.answer}</p>
 
       <CaseSummaryChips summary={r.case_summary} />
 
@@ -103,13 +111,27 @@ export default function PolicyAssistant() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sourcesInfo, setSourcesInfo] = useState(null);
+  const [llmStatus, setLlmStatus] = useState(null);
+  const [llmChecking, setLlmChecking] = useState(false);
   const bottomRef = useRef(null);
 
-  // Load case list (for the dropdown) and index info on mount.
+  // Load case list (for the dropdown), index info, and LLM status on mount.
   useEffect(() => {
     getCases().then(setCases).catch(() => setCases([]));
     getRagSources().then(setSourcesInfo).catch(() => setSourcesInfo(null));
+    getLlmStatus().then(setLlmStatus).catch(() => setLlmStatus(null));
   }, []);
+
+  async function checkLlm() {
+    setLlmChecking(true);
+    try {
+      setLlmStatus(await getLlmStatus());
+    } catch {
+      setLlmStatus(null);
+    } finally {
+      setLlmChecking(false);
+    }
+  }
 
   // Keep the latest answer in view.
   useEffect(() => {
@@ -136,18 +158,49 @@ export default function PolicyAssistant() {
     <div className="mx-auto max-w-3xl space-y-5">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-slate-900">Policy Assistant</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Ask about verification rules, ethics, limitations, and next steps. Answers come
-          from this project's local policy documents only — no external AI is used.
-        </p>
-        {sourcesInfo && (
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
-            <Library className="h-3.5 w-3.5" />
-            Indexed {sourcesInfo.chunk_count} chunks from {sourcesInfo.documents?.length} documents
-            ({sourcesInfo.mode})
-          </p>
-        )}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Policy Assistant</h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-500">
+              Ask about verification rules, ethics, limitations, and next steps. Answers are
+              grounded in this project's local policy documents. Claude can optionally phrase
+              them when enabled — otherwise a local fallback is used.
+            </p>
+          </div>
+          <button
+            onClick={checkLlm}
+            disabled={llmChecking}
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            <ServerCog className={cn("h-4 w-4", llmChecking && "animate-spin")} />
+            Check LLM Status
+          </button>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          {sourcesInfo && (
+            <span className="flex items-center gap-1.5">
+              <Library className="h-3.5 w-3.5" />
+              {sourcesInfo.chunk_count} chunks · {sourcesInfo.documents?.length} docs ({sourcesInfo.mode})
+            </span>
+          )}
+          {llmStatus && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium ring-1 ring-inset",
+                llmStatus.mode === "claude_rag"
+                  ? "bg-indigo-50 text-indigo-700 ring-indigo-200"
+                  : "bg-slate-100 text-slate-600 ring-slate-200"
+              )}
+              title={`LLM enabled: ${llmStatus.llm_enabled} · API key configured: ${llmStatus.api_key_configured}`}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {llmStatus.mode === "claude_rag"
+                ? `Claude RAG · ${llmStatus.model}`
+                : "Local fallback"}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Case selector */}

@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException
 
 from app import config
 from app.schemas import CaseListResponse, CaseSummary
-from app.services import file_storage
+from app.services import file_storage, rag_service
 
 router = APIRouter(tags=["cases"])
 
@@ -83,6 +83,21 @@ def get_agent_trace(case_id: str) -> dict:
             "message": "Agent trace is not available for this older report.",
         }
     return workflow
+
+
+@router.post("/cases/{case_id}/explain")
+def explain_case(case_id: str) -> dict:
+    """
+    Generate a source-grounded, reviewer-friendly EXPLANATION of a case (Phase 7).
+
+    Uses Claude when LLM mode is enabled, otherwise the local fallback. The
+    explanation is informational only — it never changes the case, report, risk
+    score, or any reviewer decision.
+    """
+    case = file_storage.get_case(config.CASES_INDEX_PATH, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"Case not found: {case_id}")
+    return rag_service.explain_case(case_id)
 
 
 @router.get("/reports/{case_id}")

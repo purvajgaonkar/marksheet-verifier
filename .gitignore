@@ -50,3 +50,6 @@ Thumbs.db
 .env.*
 *.key
 secrets.json
+# ...but DO allow the documented example env files (they contain no secrets).
+!.env.example
+!backend/.env.example

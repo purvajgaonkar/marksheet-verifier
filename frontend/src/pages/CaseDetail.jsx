@@ -16,14 +16,18 @@ import {
   Copy,
   Check,
   MessageSquareText,
+  Sparkles,
+  BookOpen,
+  Loader2,
 } from "lucide-react";
 import RiskBadge, { getRiskMeta } from "../components/RiskBadge";
 import ReportSection from "../components/ReportSection";
+import ModeBadge from "../components/ModeBadge";
 import ForensicsPanel from "../components/ForensicsPanel";
 import AgentTracePanel from "../components/AgentTracePanel";
 import ErrorState from "../components/ErrorState";
 import { Skeleton } from "../components/Skeleton";
-import { getReport } from "../api";
+import { getReport, generateCaseExplanation } from "../api";
 import { buttonVariants, cn } from "../lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -109,6 +113,23 @@ export default function CaseDetail() {
   const [error, setError] = useState("");
   const [decision, setDecision] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Phase 7: optional LLM explanation of this case.
+  const [explanation, setExplanation] = useState(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState("");
+
+  async function handleExplain() {
+    setExplaining(true);
+    setExplainError("");
+    try {
+      setExplanation(await generateCaseExplanation(caseId));
+    } catch (err) {
+      setExplainError(err.message || "Could not generate an explanation.");
+    } finally {
+      setExplaining(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -256,6 +277,80 @@ export default function CaseDetail() {
 
       {/* Agentic workflow trace (Phase 5) */}
       <AgentTracePanel workflow={report.agentic_workflow} />
+
+      {/* LLM explanation (Phase 7) */}
+      <ReportSection title="AI explanation for reviewers" Icon={Sparkles}>
+        <p className="text-sm text-slate-500">
+          Generate a source-grounded, plain-English explanation of this case. Uses Claude
+          when enabled, otherwise a local fallback. This is a review aid only — it does not
+          change the case, the risk score, or any decision.
+        </p>
+        <button
+          onClick={handleExplain}
+          disabled={explaining}
+          className={buttonVariants({ variant: "primary" }) + " mt-4"}
+        >
+          {explaining ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Generating…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              {explanation ? "Regenerate explanation" : "Generate LLM Explanation"}
+            </>
+          )}
+        </button>
+
+        {explainError && (
+          <p className="mt-3 text-sm text-red-600">{explainError}</p>
+        )}
+
+        {explanation && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <ModeBadge mode={explanation.mode} model={explanation.model} />
+              {explanation.llm_error && (
+                <span className="text-xs text-amber-700">
+                  Claude unavailable — used local fallback.
+                </span>
+              )}
+            </div>
+
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+              {explanation.explanation}
+            </p>
+
+            {explanation.sources?.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <BookOpen className="h-3.5 w-3.5" /> Sources used
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {explanation.sources.map((s, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200"
+                      title={s.preview}
+                    >
+                      {s.document}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {explanation.limitations?.length > 0 && (
+              <ul className="mt-3 space-y-0.5 text-xs text-slate-500">
+                {explanation.limitations.map((l, i) => (
+                  <li key={i}>• {l}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </ReportSection>
 
       {/* Reviewer actions */}
       <ReportSection title="Reviewer decision" Icon={ClipboardCheck}>

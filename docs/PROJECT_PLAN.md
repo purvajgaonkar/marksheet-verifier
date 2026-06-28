@@ -17,12 +17,14 @@ for human reviewers — it never auto-accuses or auto-rejects a student.
 | 3 | ✅ | Polished React + Vite frontend (dashboard, case detail) |
 | 4 | ✅ | Image/pixel forensics (ELA, edge, sharpness, noise, anomaly heatmap) |
 | 5 | ✅ | Local rule-based agentic orchestration |
-| 6 | ✅ | **Local RAG policy assistant** (this phase) |
-| 7 | ⬜ | `/metrics` endpoint for Prometheus |
-| 8 | ⬜ | Docker + Prometheus + Grafana |
+| 6 | ✅ | Local RAG policy assistant |
+| 7 | ✅ | **Optional Claude API RAG + explanation** (this phase) |
+| 8 | ⬜ | `/metrics` endpoint for Prometheus |
+| 9 | ⬜ | Docker + Prometheus + Grafana |
 
-No external AI/LLM API, Docker, Prometheus, Grafana, PostgreSQL, Redis, or auth
-is required for Phases 1–6. Everything runs locally.
+Phases 1–6 require no external AI/LLM API at all. Phase 7 adds an **optional**
+Claude mode — the app still runs fully locally without any API key. No Docker,
+Prometheus, Grafana, PostgreSQL, Redis, or auth is required through Phase 7.
 
 ---
 
@@ -139,6 +141,52 @@ deterministic template answer generator. No LLM, no external API, no API key.
 Endpoints: `POST /rag/ask`, `GET /rag/sources`, `POST /rag/reindex`. Knowledge
 documents: `PROJECT_PLAN.md`, `ETHICS_AND_LIMITATIONS.md`, `API_REQUIREMENTS.md`,
 `REVIEWER_GUIDELINES.md`, `RAG_POLICY_KNOWLEDGE.md`.
+
+---
+
+## Phase 7 architecture — optional Claude API mode
+
+Phase 7 adds an **optional** Claude-powered answer generator on top of the same
+local retrieval. It is controlled entirely by environment variables in
+`backend/.env`; with no key (or the switch off) the app uses the Phase 6 local
+fallback. No API key is hardcoded or committed.
+
+```
+   Reviewer Question  /  Case Explanation Request
+                       |
+                       v
+                 RAG Retriever (local TF-IDF over docs/)
+                       |
+        +--------------+--------------------+
+        v                                   v
+  Case Summary Loader (optional)      Prompt Builder (safety rules +
+  (risk, OCR, flags, anomaly,          injection defence; OCR/question
+   agents, recommendation)             treated as UNTRUSTED data)
+        |                                   |
+        +--------------+--------------------+
+                       v
+            LLM_ENABLED and ANTHROPIC_API_KEY?
+                /                    \
+             yes                      no
+              v                        v
+        Claude API            Local Template Answer
+     (claude_service)          (Phase 6 fallback)
+              |   on failure ........> |
+              v                        v
+        Safe Explanation  <-----------+
+                       |
+                       v
+       Sources + Answer (mode, model, llm_available, llm_error)
+                       |
+                       v
+     Frontend: Policy Assistant (/assistant) + Case Detail "Generate
+     LLM Explanation". Answer carries a mode badge (Claude-powered RAG /
+     Local fallback) and never shows the API key.
+```
+
+Endpoints: `GET /rag/llm-status`, `POST /cases/{case_id}/explain`, and the
+enriched `POST /rag/ask`. Safety: Claude is an explanation aid only — it cannot
+change the risk score, status, reports, or any reviewer decision.
 
 ---
 
