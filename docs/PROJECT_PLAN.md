@@ -20,16 +20,18 @@ for human reviewers — it never auto-accuses or auto-rejects a student.
 | 6 | ✅ | Local RAG policy assistant |
 | 7 | ✅ | Optional Claude API RAG + explanation |
 | 8 | ✅ | Database + student/admin workflow + audit trail |
-| 9 | ✅ | **Authentication + role-based access control** (this phase) |
-| 10 | ⬜ | `/metrics` endpoint for Prometheus |
-| 11 | ⬜ | Docker + Prometheus + Grafana |
+| 9 | ✅ | Authentication + role-based access control (JWT) |
+| 10 | ✅ | Production cleanup: env config, safe CORS, upload validation, `/health` |
+| 11 | ✅ | **Free-tier deployment preparation** (Vercel + Render + Postgres) (this phase) |
 
 Phases 1–6 require no external AI/LLM API at all. Phase 7 adds an **optional**
 Claude mode. Phase 8 adds a SQLAlchemy database (SQLite by default,
 PostgreSQL-ready) plus a student/admin workflow and an audit trail. Phase 9 adds
 email/password authentication with JWT access tokens and role-based access
-control (student vs admin/reviewer). No Docker, Prometheus, Grafana, Redis, MCP,
-or external identity provider is required through Phase 9.
+control. Phase 10 makes the app production-configurable (env vars, CORS, upload
+validation, health check). Phase 11 adds the **deployment config files and guide**
+(it prepares deployment; it does not deploy). No Kubernetes, Prometheus, Grafana,
+Redis, MCP, or external identity/verification provider is required.
 
 ---
 
@@ -283,6 +285,45 @@ via `backend/create_admin.py`). Students only ever see safe statuses; internal A
 risk details are admin/reviewer-only. Authentication changes *who sees what* — it
 does not let the AI decide; a human reviewer's recorded decision is still the only
 thing that changes a case outcome.
+
+---
+
+## Phase 11 architecture — free-tier deployment
+
+Phase 11 adds the **config files + guide** to run the stack on free hosting. The
+app is unchanged; everything is driven by environment variables.
+
+```
+   Browser
+      |
+      v
+   Vercel  (React + Vite static site)          VITE_API_BASE_URL -> backend
+      |   HTTPS (CORS restricted to FRONTEND_URL)
+      v
+   Render  (FastAPI backend, env-configured)   render.yaml / backend/runtime.txt
+      |                         |                         |
+      v                         v                         v
+   Supabase / Neon         Local file storage        Anthropic Claude API
+   PostgreSQL              (uploads/reports —         (optional; key via
+   (DATABASE_URL)          EPHEMERAL on free tier)    ANTHROPIC_API_KEY)
+```
+
+Key points:
+- **Environment-configured backend:** `DATABASE_URL`, `FRONTEND_URL`,
+  `BACKEND_URL`, `ENVIRONMENT`, JWT/LLM/upload vars — no hardcoded URLs.
+- **Database** moves to managed PostgreSQL (Supabase/Neon) via `DATABASE_URL`;
+  SQLite remains the local default. A `postgres://` URL is auto-normalised to
+  `postgresql://`.
+- **File storage** stays local for the first deploy. Free hosts have **ephemeral
+  disks**, so production should move files to **object storage** (S3 / R2 /
+  Supabase Storage) — the seam is `storage_service.py`.
+- **One-time admin setup** is protected by `SETUP_SECRET` via
+  `POST /auth/setup-admin` (no shell needed on the host).
+- **System tools** (Tesseract / ExifTool / OpenCV libs) may require the optional
+  Docker image (`backend/Dockerfile`, Phase 11B) if the native runtime lacks them.
+
+This phase *prepares* deployment; performing the deploy is a manual step (see
+[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)).
 
 ---
 

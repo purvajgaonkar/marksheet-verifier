@@ -1,0 +1,39 @@
+# Keep the Docker build context small and free of secrets / local artifacts.
+# (Used by the optional Phase 11B backend/Dockerfile; build context = repo root.)
+
+# Secrets & local env
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+secrets.json
+
+# Local database + generated student data (never ship these)
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+reports/
+forensic_outputs/
+
+# Python caches / virtualenvs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Frontend (deployed separately on Vercel)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.git/

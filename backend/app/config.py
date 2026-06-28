@@ -111,7 +111,13 @@ def llm_is_available() -> bool:
 # which directory the server is launched from. Override with DATABASE_URL to
 # use PostgreSQL (the app is PostgreSQL-ready).
 _DEFAULT_DATABASE_URL = f"sqlite:///{(PROJECT_ROOT / 'marksheet_verifier.db').as_posix()}"
-DATABASE_URL = (os.getenv("DATABASE_URL", "") or "").strip() or _DEFAULT_DATABASE_URL
+_raw_database_url = (os.getenv("DATABASE_URL", "") or "").strip()
+# Many hosts (Supabase, Neon, Heroku, Render) hand out a "postgres://" URL, but
+# SQLAlchemy 2.0 only accepts the "postgresql://" scheme. Normalise it so those
+# connection strings work as-is. SQLite and other URLs pass through unchanged.
+if _raw_database_url.startswith("postgres://"):
+    _raw_database_url = "postgresql://" + _raw_database_url[len("postgres://"):]
+DATABASE_URL = _raw_database_url or _DEFAULT_DATABASE_URL
 
 
 # ---------------------------------------------------------------------------

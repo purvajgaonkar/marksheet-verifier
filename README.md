@@ -20,7 +20,7 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–10 complete (CLI + API + UI + forensics + agents + RAG + Claude + database + auth + deploy-prep)
+## Project status: Phases 1–11 complete (full stack + auth + production config + free-tier deployment prep)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
@@ -29,9 +29,11 @@ forensics, **Phase 5** reorganises the analysis as a local rule-based **agentic
 workflow**, **Phase 6** adds a local **RAG policy assistant**, **Phase 7** adds an
 **optional Claude API** answer mode, **Phase 8** adds a real **database +
 student/admin workflow + audit trail**, **Phase 9** adds **authentication +
-role-based access control** (JWT), and **Phase 10** is **production cleanup +
-deployment preparation** (configurable env, safe CORS, upload validation, health
-check, deployment-friendly admin setup). Actual deployment is Phase 11.
+role-based access control** (JWT), **Phase 10** is **production cleanup**
+(configurable env, safe CORS, upload validation, health check), and **Phase 11**
+adds **free-tier deployment preparation** (Vercel + Render + PostgreSQL config
+files and a deployment guide). Phase 11 *prepares* deployment — you run the
+manual deploy steps yourself.
 
 ```
                  Phase 1: CLI analyzer            ✅
@@ -43,8 +45,8 @@ check, deployment-friendly admin setup). Actual deployment is Phase 11.
                  Phase 7: Optional Claude API     ✅  (key optional; local fallback)
                  Phase 8: Database + workflow     ✅  (SQLite default; Postgres-ready)
                  Phase 9: Auth + RBAC (JWT)       ✅  (student vs admin/reviewer)
-You are here ──► Phase 10: Production cleanup     ✅  (config, CORS, validation, /health)
-                 Phase 11: Free-tier deployment
+                 Phase 10: Production cleanup     ✅  (config, CORS, validation, /health)
+You are here ──► Phase 11: Deployment prep        ✅  (Vercel + Render + Postgres; manual deploy)
 ```
 
 ## Quick start (full stack)
@@ -218,6 +220,60 @@ You will get:
   official APIs and is out of scope for the MVP).
 - Reviewer decisions in the UI are saved in the browser only (localStorage);
   the backend does not persist them yet.
+
+---
+
+## Deployment (Phase 11) — free-tier stack
+
+Phase 11 adds the **config files and a step-by-step guide** to deploy on free
+tiers. **It prepares deployment; it does not deploy.** You run the manual steps
+in **[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)** (written for Windows).
+
+**Stack**
+
+| Layer | Platform (free) | Config file |
+|-------|-----------------|-------------|
+| Frontend (React/Vite) | **Vercel** | [`frontend/vercel.json`](frontend/vercel.json) |
+| Backend (FastAPI) | **Render** | [`render.yaml`](render.yaml), [`backend/runtime.txt`](backend/runtime.txt) |
+| Database (PostgreSQL) | **Supabase** or **Neon** | via `DATABASE_URL` |
+| File storage | local for first test (ephemeral) → object storage later | `storage_service.py` |
+| Claude (optional) | Anthropic API | via `ANTHROPIC_API_KEY` |
+
+**Local vs deployed architecture**
+
+```
+Local dev:    Vite :5173  ->  uvicorn :8000  ->  SQLite file  ->  local uploads/
+Deployed:     Vercel       ->  Render (FastAPI) ->  Supabase/Neon Postgres  ->  local uploads/* 
+                (HTTPS, CORS restricted to FRONTEND_URL)            (* ephemeral on free tier)
+```
+
+**Live links** (fill in after you deploy):
+
+- Frontend demo: `TO_BE_ADDED_AFTER_DEPLOYMENT`
+- Backend health: `TO_BE_ADDED_AFTER_DEPLOYMENT` (e.g. `https://<your-backend>.onrender.com/health`)
+
+**Deploy in brief** (full steps + screenshots-worth of detail in the guide):
+
+1. Create a PostgreSQL DB on Supabase/Neon → copy its connection string.
+2. Render → New Web Service from your repo: root `backend`, start
+   `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health `/health`;
+   set the env vars (incl. `DATABASE_URL`, `ENVIRONMENT=production`, strong
+   `JWT_SECRET_KEY` + `SETUP_SECRET`).
+3. Verify `https://<backend>/health` → `status: ok`, `database: connected`.
+4. Create the first admin **once** via `POST /auth/setup-admin` with your `SETUP_SECRET`.
+5. Vercel → import repo: root `frontend`, set `VITE_API_BASE_URL=https://<backend>`.
+6. Set `FRONTEND_URL=https://<vercel-url>` in Render (CORS) and restart.
+
+> ⚠️ **Free-tier caveats:** the backend **sleeps** when idle (slow first
+> request); OCR/forensics are slow on small instances; local file storage is
+> **ephemeral** (uploaded files are lost on redeploy — DB rows survive); and
+> **Tesseract/ExifTool/OpenCV** may require the optional Docker fallback
+> ([`backend/Dockerfile`](backend/Dockerfile), "Phase 11B" in the guide) if
+> Render's native Python runtime can't provide them.
+
+> 🔒 **No secrets in git.** `render.yaml` uses `sync: false` / `generateValue`;
+> real keys, the JWT secret, the setup secret, and the database URL are pasted
+> into the Render/Vercel dashboards only.
 
 ---
 

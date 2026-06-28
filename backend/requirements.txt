@@ -37,7 +37,11 @@ passlib[bcrypt]>=1.7.4    # password hashing (Phase 9 auth)
 bcrypt>=4.0.1,<4.1        # pin: passlib 1.7.4 is incompatible with bcrypt >= 4.1
 python-jose[cryptography]>=3.3.0  # JWT access tokens (Phase 9 auth)
 email-validator>=2.0.0    # validates email addresses in auth schemas (Phase 9)
-# For PostgreSQL later, also install a driver, e.g.:  pip install "psycopg[binary]"
+
+# --- Phase 11: PostgreSQL driver for deployment (Supabase / Neon / Render) ---
+# Only used when DATABASE_URL points at PostgreSQL. SQLite (the local default)
+# needs no driver, so this is harmless locally.
+psycopg2-binary>=2.9.9
 
 # --- Phase 9: metrics (added later) ----------------------------------
 # prometheus-client>=0.20.0
