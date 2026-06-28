@@ -46,3 +46,17 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class SetupAdminRequest(BaseModel):
+    """Body for POST /auth/setup-admin (one-time first-admin bootstrap)."""
+    email: EmailStr
+    full_name: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=8, max_length=128)
+    setup_secret: str = Field(..., min_length=1)
+
+
+class SetupAdminResponse(BaseModel):
+    """Returned by POST /auth/setup-admin."""
+    message: str
+    user: UserResponse

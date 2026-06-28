@@ -21,17 +21,25 @@ failure) so routes can return a clean 400/422.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi.concurrency import run_in_threadpool
 
 from app import config
-from app.services import file_storage, persistence_service, report_service
+from app.services import (
+    file_storage,
+    persistence_service,
+    report_service,
+    storage_service,
+)
 from app.services.analysis_service import AnalyzerError, analyze_file
 from app.utils import hashing
+from app.utils.file_utils import UploadValidationError, validate_upload_file
+
+logger = logging.getLogger("marksheet.intake")
 
 # Fresh submissions always start in human-gated review (never auto-verified).
 DEFAULT_STATUS = "under_review"
@@ -51,37 +59,36 @@ async def run_intake(
     *,
     student_info: Optional[dict] = None,
     student_user_id: Optional[int] = None,
+    content_type: Optional[str] = None,
 ) -> dict:
     """
     Process one uploaded file end-to-end. Returns a dict with the case_id, the
     full report, file/report paths, the student-facing status, and the key
     signals (for the admin response). Raises IntakeError on client problems.
     """
-    if not original_filename:
-        raise IntakeError("No filename provided.")
-    extension = Path(original_filename).suffix.lower()
-    if extension not in config.SUPPORTED_EXTENSIONS:
-        raise IntakeError(
-            f"Unsupported file type '{extension}'. "
-            f"Supported types: {', '.join(sorted(config.SUPPORTED_EXTENSIONS))}"
+    # Centralised upload validation (extension, size, non-empty, content sniff).
+    try:
+        extension = validate_upload_file(
+            original_filename, file_bytes, content_type=content_type
         )
-    if not file_bytes:
-        raise IntakeError("Uploaded file is empty.")
+    except UploadValidationError as exc:
+        raise IntakeError(str(exc)) from exc
 
     config.ensure_directories()
 
     case_id = _new_case_id()
     sha256 = hashing.sha256_bytes(file_bytes)
+    logger.info("Upload received: case_id=%s ext=%s bytes=%d", case_id, extension, len(file_bytes))
 
-    saved = file_storage.save_upload(
+    saved = storage_service.save_upload(
         file_bytes=file_bytes,
         original_filename=original_filename,
         case_id=case_id,
-        uploads_dir=config.UPLOADS_DIR,
     )
     stored_path = saved["stored_path"]
 
     # Run the shared analyzer pipeline in a worker thread (it is CPU-bound).
+    logger.info("Analysis started: case_id=%s", case_id)
     try:
         report = await run_in_threadpool(
             analyze_file,
@@ -92,7 +99,10 @@ async def run_intake(
             verbose=False,
         )
     except AnalyzerError as exc:
+        # Client-facing problem (bad/unreadable file). Don't log document text.
+        logger.warning("Analysis failed: case_id=%s reason=%s", case_id, exc)
         raise IntakeError(str(exc)) from exc
+    logger.info("Analysis completed: case_id=%s", case_id)
 
     # Enrich + save the JSON report (unchanged Phase 2 behaviour).
     report["case_id"] = case_id

@@ -6,7 +6,10 @@
 // so the UI can show a clean ErrorState instead of a blank screen.
 // ---------------------------------------------------------------------------
 
-export const API_BASE_URL = "http://127.0.0.1:8000";
+// Base URL of the backend API. Configurable per environment via Vite
+// (frontend/.env -> VITE_API_BASE_URL). Falls back to the local dev address.
+export const API_BASE_URL =
+  (import.meta.env && import.meta.env.VITE_API_BASE_URL) || "http://127.0.0.1:8000";
 
 /**
  * Try to pull a useful error message out of a failed response.
@@ -56,9 +59,41 @@ function authHeaders(extra = {}) {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
+/**
+ * fetch() wrapper used by every call below.
+ *   * Turns network failures (backend offline) into a friendly message.
+ *   * If an AUTHENTICATED request returns 401, the token is expired/invalid:
+ *     clear it and broadcast "mv:unauthorized" so the app can redirect to login.
+ */
+async function http(url, options = {}) {
+  let response;
+  try {
+    response = await window.fetch(url, options);
+  } catch (err) {
+    // TypeError from fetch == network/DNS/CORS failure (server unreachable).
+    if (err instanceof TypeError) {
+      throw new Error("Cannot reach the server. Please make sure the backend is running.");
+    }
+    throw err;
+  }
+  if (response.status === 401) {
+    const headers = options.headers || {};
+    const sentToken = headers.Authorization || headers.authorization;
+    if (sentToken) {
+      setToken(null);
+      try {
+        window.dispatchEvent(new CustomEvent("mv:unauthorized"));
+      } catch {
+        /* non-browser environment */
+      }
+    }
+  }
+  return response;
+}
+
 /** GET /health -> { status, tesseract_available, exiftool_available, ... } */
 export async function getHealth() {
-  const response = await fetch(`${API_BASE_URL}/health`);
+  const response = await http(`${API_BASE_URL}/health`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -71,7 +106,7 @@ export async function uploadFile(file) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE_URL}/upload`, {
+  const response = await http(`${API_BASE_URL}/upload`, {
     method: "POST",
     body: formData,
   });
@@ -84,7 +119,7 @@ export async function uploadFile(file) {
  * We return just the array of cases for convenience.
  */
 export async function getCases() {
-  const response = await fetch(`${API_BASE_URL}/cases`);
+  const response = await http(`${API_BASE_URL}/cases`);
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
   return Array.isArray(data) ? data : data.cases ?? [];
@@ -92,7 +127,7 @@ export async function getCases() {
 
 /** GET /reports/{caseId} -> the full report object. */
 export async function getReport(caseId) {
-  const response = await fetch(`${API_BASE_URL}/reports/${encodeURIComponent(caseId)}`);
+  const response = await http(`${API_BASE_URL}/reports/${encodeURIComponent(caseId)}`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -102,7 +137,7 @@ export async function getReport(caseId) {
  * Returns { case_id, available, outputs: { ela_image: <url>, ... } }.
  */
 export async function getForensics(caseId) {
-  const response = await fetch(`${API_BASE_URL}/forensics/${encodeURIComponent(caseId)}`);
+  const response = await http(`${API_BASE_URL}/forensics/${encodeURIComponent(caseId)}`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -115,7 +150,7 @@ export async function getForensics(caseId) {
 export async function askPolicyAssistant(question, caseId) {
   const body = { question };
   if (caseId) body.case_id = caseId;
-  const response = await fetch(`${API_BASE_URL}/rag/ask`, {
+  const response = await http(`${API_BASE_URL}/rag/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -126,14 +161,14 @@ export async function askPolicyAssistant(question, caseId) {
 
 /** GET /rag/sources -> { documents, chunk_count, mode }. */
 export async function getRagSources() {
-  const response = await fetch(`${API_BASE_URL}/rag/sources`);
+  const response = await http(`${API_BASE_URL}/rag/sources`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
 
 /** POST /rag/reindex -> rebuild the local index from docs/. */
 export async function reindexRag() {
-  const response = await fetch(`${API_BASE_URL}/rag/reindex`, { method: "POST" });
+  const response = await http(`${API_BASE_URL}/rag/reindex`, { method: "POST" });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -143,7 +178,7 @@ export async function reindexRag() {
  * Reports whether the optional Claude API mode is active. Never returns the key.
  */
 export async function getLlmStatus() {
-  const response = await fetch(`${API_BASE_URL}/rag/llm-status`);
+  const response = await http(`${API_BASE_URL}/rag/llm-status`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -154,7 +189,7 @@ export async function getLlmStatus() {
  * { case_id, mode, model, explanation, sources, limitations, llm_available, llm_error }.
  */
 export async function generateCaseExplanation(caseId) {
-  const response = await fetch(
+  const response = await http(
     `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/explain`,
     { method: "POST" }
   );
@@ -178,7 +213,7 @@ export async function submitStudentMarksheet(file, fields = {}) {
     if (value) formData.append(key, value);
   }
   // Authenticated student upload (Phase 9). Do NOT set Content-Type for FormData.
-  const response = await fetch(`${API_BASE_URL}/student/submit`, {
+  const response = await http(`${API_BASE_URL}/student/submit`, {
     method: "POST",
     headers: authHeaders(),
     body: formData,
@@ -189,7 +224,7 @@ export async function submitStudentMarksheet(file, fields = {}) {
 
 /** GET /student/submission/{caseId} -> safe status for the logged-in student. */
 export async function getStudentSubmission(caseId) {
-  const response = await fetch(
+  const response = await http(
     `${API_BASE_URL}/student/submission/${encodeURIComponent(caseId)}`,
     { headers: authHeaders() }
   );
@@ -199,7 +234,7 @@ export async function getStudentSubmission(caseId) {
 
 /** GET /student/my-submissions -> safe list of the logged-in student's cases. */
 export async function getMySubmissions() {
-  const response = await fetch(`${API_BASE_URL}/student/my-submissions`, {
+  const response = await http(`${API_BASE_URL}/student/my-submissions`, {
     headers: authHeaders(),
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -208,7 +243,7 @@ export async function getMySubmissions() {
 
 /** GET /admin/cases -> { count, cases: [...] } with admin fields (admin/reviewer). */
 export async function getAdminCases() {
-  const response = await fetch(`${API_BASE_URL}/admin/cases`, { headers: authHeaders() });
+  const response = await http(`${API_BASE_URL}/admin/cases`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
   return Array.isArray(data) ? data : data.cases ?? [];
@@ -216,7 +251,7 @@ export async function getAdminCases() {
 
 /** GET /admin/cases/{caseId} -> { case, submission, report, decisions, audit_logs }. */
 export async function getAdminCase(caseId) {
-  const response = await fetch(`${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}`, {
+  const response = await http(`${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}`, {
     headers: authHeaders(),
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -228,7 +263,7 @@ export async function getAdminCase(caseId) {
  * `body` = { decision, reviewer_comment, student_status }.
  */
 export async function postAdminDecision(caseId, body) {
-  const response = await fetch(
+  const response = await http(
     `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/decision`,
     {
       method: "POST",
@@ -242,7 +277,7 @@ export async function postAdminDecision(caseId, body) {
 
 /** GET /admin/cases/{caseId}/audit -> { case_id, audit_logs: [...] }. */
 export async function getAdminAudit(caseId) {
-  const response = await fetch(
+  const response = await http(
     `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/audit`,
     { headers: authHeaders() }
   );
@@ -259,7 +294,7 @@ export async function getAdminAudit(caseId) {
  * `data` = { email, full_name, password }. Returns the safe user object.
  */
 export async function registerUser(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  const response = await http(`${API_BASE_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -273,7 +308,7 @@ export async function registerUser(data) {
  * Stores the token for subsequent authenticated requests.
  */
 export async function loginUser(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await http(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -286,7 +321,7 @@ export async function loginUser(data) {
 
 /** GET /auth/me -> the current user (requires a valid token). */
 export async function getCurrentUser() {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, { headers: authHeaders() });
+  const response = await http(`${API_BASE_URL}/auth/me`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -294,7 +329,7 @@ export async function getCurrentUser() {
 /** POST /auth/logout -> best-effort server call, then clears the local token. */
 export async function logoutUser() {
   try {
-    await fetch(`${API_BASE_URL}/auth/logout`, {
+    await http(`${API_BASE_URL}/auth/logout`, {
       method: "POST",
       headers: authHeaders(),
     });
@@ -311,7 +346,7 @@ export async function logoutUser() {
  * provided mainly for the dedicated endpoint / standalone use.
  */
 export async function getAgentTrace(caseId) {
-  const response = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/agent-trace`);
+  const response = await http(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/agent-trace`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }

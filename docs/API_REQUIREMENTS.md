@@ -184,3 +184,38 @@ stateless: "logout" simply discards the token client-side.
 
 > Still **not** needed: no external auth provider, OAuth, SSO, email/SMS, or
 > third-party identity service. Authentication is local username/password + JWT.
+
+---
+
+## Phase 10 Deployment Configuration
+
+Phase 10 adds production-configuration variables. All have safe local defaults,
+so development still needs zero setup.
+
+### Backend (`backend/.env`)
+
+| Variable | Default (dev) | Purpose |
+|----------|---------------|---------|
+| `ENVIRONMENT` | `development` | `development` = permissive local CORS + error details; `production` = strict CORS + generic errors. |
+| `FRONTEND_URL` | `http://localhost:5173` | Allowed browser origin(s) for CORS. Comma-separated for multiple, e.g. `http://localhost:5173,https://your-app.vercel.app`. |
+| `BACKEND_URL` | `http://127.0.0.1:8000` | Public URL of the backend (for docs/links). |
+| `SETUP_SECRET` | *(empty)* | Enables one-time `POST /auth/setup-admin`. Empty/placeholder = endpoint disabled. **Never commit.** |
+| `MAX_UPLOAD_SIZE_MB` | `10` | Maximum accepted upload size, in MB. |
+| `ALLOWED_UPLOAD_EXTENSIONS` | `.pdf,.png,.jpg,.jpeg` | Comma-separated allowed file extensions. |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Default (dev) | Purpose |
+|----------|---------------|---------|
+| `VITE_API_BASE_URL` | `http://127.0.0.1:8000` | Base URL of the backend API. Only `VITE_`-prefixed vars reach the browser — **never** put secrets here. |
+
+### Health & first-admin endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET`  | `/health` | public | liveness: `{status, environment, database, llm_enabled, version, …}` (no secrets) |
+| `POST` | `/auth/setup-admin` | `setup_secret` in body | create the FIRST admin once after deploy (disabled unless `SETUP_SECRET` set; refuses if staff already exist) |
+
+> Still **not** needed: no Docker, Kubernetes, Prometheus, Grafana, MCP, cloud
+> storage, or external verification API to run or prepare the app. Object storage
+> and PostgreSQL are *recommended for production* but optional and not wired in yet.

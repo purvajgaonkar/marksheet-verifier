@@ -62,6 +62,24 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_csv(value: str | None) -> list[str]:
+    """Split a comma-separated env string into a clean list (no empties)."""
+    return [part.strip() for part in (value or "").split(",") if part.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: deployment environment.
+# ---------------------------------------------------------------------------
+# ENVIRONMENT switches a few safety behaviours (e.g. CORS strictness and whether
+# error responses include details). FRONTEND_URL / BACKEND_URL are the public
+# URLs once deployed; locally they default to the Vite / uvicorn dev addresses.
+ENVIRONMENT = (os.getenv("ENVIRONMENT", "") or "").strip().lower() or "development"
+IS_PRODUCTION = ENVIRONMENT == "production"
+
+FRONTEND_URL = (os.getenv("FRONTEND_URL", "") or "").strip() or "http://localhost:5173"
+BACKEND_URL = (os.getenv("BACKEND_URL", "") or "").strip() or "http://127.0.0.1:8000"
+
+
 ANTHROPIC_API_KEY = (os.getenv("ANTHROPIC_API_KEY", "") or "").strip()
 # Default to a current, valid model. (The older "claude-3-5-sonnet-latest" alias
 # is retired and returns 404; claude-sonnet-4-6 is its current equivalent.)
@@ -110,20 +128,72 @@ except (TypeError, ValueError):
     ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
 # ---------------------------------------------------------------------------
-# Accepted uploads
+# Phase 10: one-time first-admin bootstrap secret.
 # ---------------------------------------------------------------------------
-SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+# Used by POST /auth/setup-admin to create the very first admin after a fresh
+# deployment (when create_admin.py is not available). Read from the environment
+# only; the placeholder value counts as "unset" so the endpoint stays disabled.
+SETUP_SECRET = (os.getenv("SETUP_SECRET", "") or "").strip()
+if SETUP_SECRET in {"change_this_to_a_long_random_setup_secret"}:
+    SETUP_SECRET = ""
+
+
+def setup_admin_enabled() -> bool:
+    """True only when a non-empty SETUP_SECRET is configured."""
+    return bool(SETUP_SECRET)
+
 
 # ---------------------------------------------------------------------------
-# CORS: which web origins are allowed to call this API from a browser.
-# These are the default ports for Vite (5173) and Create-React-App (3000).
+# Accepted uploads (Phase 10: configurable size + extensions)
 # ---------------------------------------------------------------------------
-ALLOWED_ORIGINS = [
+try:
+    MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+except (TypeError, ValueError):
+    MAX_UPLOAD_SIZE_MB = 10
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+_DEFAULT_UPLOAD_EXTENSIONS = ".pdf,.png,.jpg,.jpeg"
+
+
+def _parse_ext_set(raw: str | None) -> set[str]:
+    """Parse '.pdf,.png' (or 'pdf, png') into a normalised set {'.pdf', '.png'}."""
+    out: set[str] = set()
+    for part in (raw or "").split(","):
+        p = part.strip().lower()
+        if not p:
+            continue
+        if not p.startswith("."):
+            p = "." + p
+        out.add(p)
+    return out
+
+
+ALLOWED_UPLOAD_EXTENSIONS = (
+    _parse_ext_set(os.getenv("ALLOWED_UPLOAD_EXTENSIONS", _DEFAULT_UPLOAD_EXTENSIONS))
+    or _parse_ext_set(_DEFAULT_UPLOAD_EXTENSIONS)
+)
+# Backward-compatible alias (older modules import SUPPORTED_EXTENSIONS).
+SUPPORTED_EXTENSIONS = ALLOWED_UPLOAD_EXTENSIONS
+
+# ---------------------------------------------------------------------------
+# CORS: which web origins may call this API from a browser.
+# Origins come from FRONTEND_URL (comma-separated). In development we also allow
+# the common local dev ports. We NEVER use a wildcard ("*") in production.
+# ---------------------------------------------------------------------------
+_DEV_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+_frontend_origins = _parse_csv(FRONTEND_URL)
+
+if IS_PRODUCTION:
+    # Restrict strictly to the configured frontend URL(s).
+    ALLOWED_ORIGINS = _frontend_origins or _DEV_ORIGINS
+else:
+    # Development: configured origins + local dev ports, de-duplicated, order-kept.
+    ALLOWED_ORIGINS = list(dict.fromkeys(_frontend_origins + _DEV_ORIGINS))
 
 
 def ensure_directories() -> None:

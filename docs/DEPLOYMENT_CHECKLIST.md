@@ -1,0 +1,96 @@
+# Deployment Checklist (Phase 10)
+
+A pre-flight checklist for taking marksheet-verifier from local development to a
+real deployment. **Phase 10 prepares the app for deployment — it does not deploy
+it.** The actual free-tier deployment is planned for Phase 11.
+
+> Golden rule: **no secrets in git.** API keys, the JWT secret, and the setup
+> secret are set as environment variables / platform secrets only.
+
+---
+
+## 1. Secrets & environment variables
+
+- [ ] **`JWT_SECRET_KEY`** — set a long random value (NOT the dev default).
+      Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+- [ ] **`SETUP_SECRET`** — set a long random value (used once, see §5).
+- [ ] **`ANTHROPIC_API_KEY`** — set only in the deployment platform's secret store
+      (leave `LLM_ENABLED=false` if you don't want Claude). Never commit it.
+- [ ] **`DATABASE_URL`** — point at PostgreSQL for production (see §3).
+- [ ] **`FRONTEND_URL`** — set to the deployed frontend origin(s), comma-separated
+      if more than one (e.g. `https://your-app.vercel.app`).
+- [ ] **`BACKEND_URL`** — set to the deployed backend URL.
+- [ ] **`ENVIRONMENT=production`** — enables strict CORS + hides error details.
+- [ ] **`MAX_UPLOAD_SIZE_MB`** — confirm the upload size limit (default 10).
+- [ ] **`ALLOWED_UPLOAD_EXTENSIONS`** — confirm allowed types (default
+      `.pdf,.png,.jpg,.jpeg`).
+- [ ] Frontend **`VITE_API_BASE_URL`** — set to the deployed backend URL at build time.
+
+## 2. Do NOT commit
+
+- [ ] `backend/.env` and `frontend/.env` (only the `*.env.example` files).
+- [ ] `uploads/`, `reports/`, `forensic_outputs/` (student data / generated output).
+- [ ] `*.db` / `*.sqlite` (the local database).
+- [ ] Confirm with: `git status --porcelain` shows none of the above.
+
+## 3. Database
+
+- [ ] Local default is **SQLite** (`sqlite:///./marksheet_verifier.db`) — fine for
+      development, **not** for production (ephemeral disks lose it).
+- [ ] For production use **PostgreSQL**: set
+      `DATABASE_URL=postgresql+psycopg://user:pass@host:5432/dbname` and install a
+      driver (`pip install "psycopg[binary]"`).
+- [ ] Tables are created automatically on startup; no manual migration needed yet.
+
+## 4. File storage
+
+- [ ] Local `uploads/` is for development only. On ephemeral hosting it is wiped
+      on redeploy/restart.
+- [ ] For production, use object storage (Supabase Storage / S3 / Cloudflare R2)
+      and store the path/URL in `Case.file_path`. See
+      `backend/app/services/storage_service.py` (the single seam to swap).
+
+## 5. First admin after deployment
+
+- [ ] **Locally:** `cd backend && python create_admin.py` (interactive).
+- [ ] **On a deployment** (no shell / can't run the script): call the one-time
+      bootstrap endpoint **exactly once**:
+
+  ```
+  POST /auth/setup-admin
+  { "email": "...", "full_name": "...", "password": "...", "setup_secret": "<SETUP_SECRET>" }
+  ```
+
+  - Works only when `SETUP_SECRET` is set AND no admin/reviewer exists yet.
+  - Returns "Admin setup is already completed." once staff exist.
+- [ ] After creating the first admin, you may rotate/remove `SETUP_SECRET`.
+- [ ] **Never** commit or share `SETUP_SECRET`.
+
+## 6. Security
+
+- [ ] Strong `JWT_SECRET_KEY` and `SETUP_SECRET` (done in §1).
+- [ ] `ENVIRONMENT=production` so CORS is restricted to `FRONTEND_URL` (never `*`).
+- [ ] Serve over **HTTPS** (platform-provided TLS).
+- [ ] Admin routes require auth — verify no token → 401, student token → 403.
+- [ ] Upload size limit + extension allow-list active (default 10 MB).
+- [ ] Students never see internal AI risk details (risk score, forensics,
+      metadata, agent trace, AI explanation).
+- [ ] No tracebacks returned to the client in production (generic 500 message).
+
+## 7. Smoke tests after deploy
+
+- [ ] `GET /health` returns `status: ok`, `database: connected`, correct
+      `environment`, and `version: phase-10`.
+- [ ] Register a student → login → student sees only safe statuses.
+- [ ] Student upload: a valid PDF/JPG/PNG is accepted.
+- [ ] Upload validation: a disallowed type (e.g. `.exe`/`.zip`) is rejected; an
+      oversized file is rejected.
+- [ ] Login as admin → admin dashboard loads.
+- [ ] Admin case detail + record a decision → audit trail updates.
+- [ ] Claude explanation works (or gracefully falls back if `LLM_ENABLED=false`).
+- [ ] Refresh the page → the session persists (token in localStorage).
+- [ ] Logout → protected routes redirect to login.
+
+---
+
+**Status:** Phase 10 = deployment *preparation*. Deployment itself is Phase 11.

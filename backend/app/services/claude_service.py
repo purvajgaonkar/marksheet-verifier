@@ -20,10 +20,13 @@ Key guarantees:
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from app import config
 from app.prompts.rag_answer_prompt import SYSTEM_PROMPT, build_user_prompt
+
+logger = logging.getLogger("marksheet.claude")
 
 # Short, fixed safety notes returned alongside every Claude answer.
 _SAFETY_NOTES = [
@@ -121,4 +124,5 @@ def generate_claude_rag_answer(
         }
     except Exception as exc:  # noqa: BLE001 - any API error -> graceful fallback
         # Note: we surface only the error type + message, never the API key.
+        logger.warning("Claude call failed; using local fallback: %s", type(exc).__name__)
         return _unavailable(f"{type(exc).__name__}: {exc}")

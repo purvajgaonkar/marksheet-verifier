@@ -91,6 +91,7 @@ async def student_submit(
             file.filename,
             student_info=student_info,
             student_user_id=current_user.id,
+            content_type=file.content_type,
         )
     except intake_service.IntakeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

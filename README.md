@@ -20,7 +20,7 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–9 complete (CLI + API + UI + forensics + agents + RAG + Claude + database/workflow + auth)
+## Project status: Phases 1–10 complete (CLI + API + UI + forensics + agents + RAG + Claude + database + auth + deploy-prep)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
@@ -28,8 +28,10 @@ adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
 forensics, **Phase 5** reorganises the analysis as a local rule-based **agentic
 workflow**, **Phase 6** adds a local **RAG policy assistant**, **Phase 7** adds an
 **optional Claude API** answer mode, **Phase 8** adds a real **database +
-student/admin workflow + audit trail**, and **Phase 9** adds **authentication +
-role-based access control** (JWT). Later phases add metrics and Docker.
+student/admin workflow + audit trail**, **Phase 9** adds **authentication +
+role-based access control** (JWT), and **Phase 10** is **production cleanup +
+deployment preparation** (configurable env, safe CORS, upload validation, health
+check, deployment-friendly admin setup). Actual deployment is Phase 11.
 
 ```
                  Phase 1: CLI analyzer            ✅
@@ -40,9 +42,9 @@ role-based access control** (JWT). Later phases add metrics and Docker.
                  Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
                  Phase 7: Optional Claude API     ✅  (key optional; local fallback)
                  Phase 8: Database + workflow     ✅  (SQLite default; Postgres-ready)
-You are here ──► Phase 9: Auth + RBAC (JWT)       ✅  (student vs admin/reviewer)
-                 Phase 10: /metrics endpoint for Prometheus/Grafana
-                 Phase 11: Docker + Prometheus
+                 Phase 9: Auth + RBAC (JWT)       ✅  (student vs admin/reviewer)
+You are here ──► Phase 10: Production cleanup     ✅  (config, CORS, validation, /health)
+                 Phase 11: Free-tier deployment
 ```
 
 ## Quick start (full stack)
@@ -216,6 +218,110 @@ You will get:
   official APIs and is out of scope for the MVP).
 - Reviewer decisions in the UI are saved in the browser only (localStorage);
   the backend does not persist them yet.
+
+---
+
+## Production cleanup + deployment preparation (Phase 10)
+
+Phase 10 makes the full stack **production-configurable** without changing how it
+runs locally (every new setting has a safe default). **This phase prepares for
+deployment; it does not deploy** — that's Phase 11.
+
+**What it adds**
+- **Configurable backend** via env vars: `ENVIRONMENT`, `FRONTEND_URL`,
+  `BACKEND_URL`, `SETUP_SECRET`, `MAX_UPLOAD_SIZE_MB`, `ALLOWED_UPLOAD_EXTENSIONS`
+  (plus the existing DB/LLM/JWT vars).
+- **Configurable frontend** via `VITE_API_BASE_URL` — no more hardcoded backend
+  URL in the React code.
+- **Safe CORS:** allowed origins come from `FRONTEND_URL` (comma-separated
+  supported). In `production` CORS is restricted to those origins — **never** `*`.
+- **Upload validation** on every upload route: extension allow-list, size limit,
+  empty-file rejection, filename sanitisation, and **magic-byte content sniffing**
+  (a renamed `.exe`/`.zip`/`.html` posing as a PDF/image is rejected).
+- **Health check:** `GET /health` now returns `{status, environment, database,
+  llm_enabled, version}` (no secrets) for deployment platforms.
+- **Deployment-friendly first admin:** `POST /auth/setup-admin` (see below).
+- **Global error handling + logging:** generic 500s in production (no
+  tracebacks), structured logs that never include passwords, tokens, secrets, or
+  document text. Expired tokens (401) auto-log-out the frontend.
+- **Storage seam:** `backend/app/services/storage_service.py` centralises file
+  storage (local now) with documented TODOs for object storage (S3/R2/Supabase).
+
+### Configuration
+
+Backend — copy `backend/.env.example` to `backend/.env` (all values have local
+defaults):
+
+```env
+DATABASE_URL=sqlite:///./marksheet_verifier.db
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-sonnet-4-6
+LLM_ENABLED=false
+LLM_MAX_TOKENS=900
+JWT_SECRET_KEY=change_this_to_a_long_random_secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+SETUP_SECRET=change_this_to_a_long_random_setup_secret
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://127.0.0.1:8000
+ENVIRONMENT=development
+MAX_UPLOAD_SIZE_MB=10
+ALLOWED_UPLOAD_EXTENSIONS=.pdf,.png,.jpg,.jpeg
+```
+
+Frontend — copy `frontend/.env.example` to `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+> ⚠️ Only `VITE_`-prefixed variables are exposed to the browser. **Never** put
+> API keys or secrets in `frontend/.env` — anything there is public.
+
+### Health check
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
+# { "status":"ok", "environment":"development", "database":"connected",
+#   "llm_enabled":false, "version":"phase-10", ... }
+```
+
+### Creating the first admin
+
+- **Local development:** `cd backend && python create_admin.py` (interactive).
+- **After deployment** (no shell access): set a strong `SETUP_SECRET`, then call
+  the one-time bootstrap endpoint **once**:
+
+```powershell
+$body = @{
+  email        = "admin@example.com"
+  full_name    = "Admin User"
+  password     = "StrongPassword123"
+  setup_secret = "<your SETUP_SECRET>"
+} | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8000/auth/setup-admin" -Method Post -ContentType "application/json" -Body $body
+```
+
+`/auth/setup-admin` is **disabled** unless `SETUP_SECRET` is set, and it refuses
+once any admin/reviewer exists ("Admin setup is already completed."). **Never
+commit or share `SETUP_SECRET`.**
+
+### Deployment preparation notes
+
+- Local default DB is **SQLite**; switch to **PostgreSQL** for production by
+  setting `DATABASE_URL` (install a driver: `pip install "psycopg[binary]"`).
+- Local `uploads/` is for development; use object storage in production (see
+  `storage_service.py`).
+- Set `ENVIRONMENT=production`, a real `FRONTEND_URL`, strong `JWT_SECRET_KEY`
+  and `SETUP_SECRET`, and serve over HTTPS.
+- Full steps: [docs/DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md).
+
+### Security limitations (for now)
+
+- Not yet deployed; no rate limiting, account lockout, refresh tokens, or
+  antivirus scanning of uploads.
+- Don't expose this publicly with **real** student data until the production
+  hardening in the checklist is done. Free-tier **deployment is Phase 11**.
 
 ---
 

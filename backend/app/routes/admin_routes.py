@@ -15,6 +15,7 @@ The system never auto-decides — POST .../decision represents a human action.
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -28,6 +29,7 @@ from app.services import persistence_service
 
 # Every route in this router requires an authenticated admin OR reviewer (Phase 9).
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_admin_or_reviewer)])
+logger = logging.getLogger("marksheet.admin")
 
 
 def _load_report(case_id: str) -> dict | None:
@@ -109,6 +111,10 @@ def record_decision(
     )
     db.commit()
     db.refresh(case)
+    logger.info(
+        "Admin decision added: case_id=%s decision=%s status=%s by_user=%s",
+        case_id, body.decision, body.student_status, reviewer.id,
+    )
 
     return {
         "case": persistence_service.case_to_admin_dict(case),

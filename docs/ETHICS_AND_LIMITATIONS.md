@@ -216,6 +216,33 @@ password reset, or MFA.
 
 ---
 
+## Deployment & data handling (Phase 10)
+
+Production cleanup keeps the same ethical commitments and adds operational ones:
+
+- **Uploaded documents may contain sensitive personal information** (names, roll
+  numbers, marks, dates of birth). Treat every upload as private data.
+- **Student-facing UI must not expose internal risk scores.** The risk score,
+  forensics score, metadata warnings, agent trace, and AI explanation are
+  admin/reviewer-only — never returned to a student account.
+- **Admin-only AI evidence must be protected** behind authentication and role
+  checks (no token → 401, student token → 403).
+- **AI evidence is advisory.** Automated signals assist a human; they never
+  decide. Only a human reviewer's recorded decision changes a case outcome.
+- **Human review remains required**, especially before any high-impact action;
+  official board / DigiLocker verification is stronger than any image signal.
+- **Production deployments should use secure storage and access control:**
+  object storage for uploaded files, PostgreSQL for data, HTTPS everywhere,
+  strong `JWT_SECRET_KEY` / `SETUP_SECRET`, and CORS restricted to the real
+  frontend origin. Secrets live in environment variables, never in git.
+- **Upload safety:** size limits and an extension/content allow-list reduce the
+  risk of malicious uploads, but this is not a substitute for a full antivirus /
+  content-scanning pipeline in a real deployment.
+
+See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for the operational steps.
+
+---
+
 ## Summary
 
 | Signal | Strength | Can be wrong because… |

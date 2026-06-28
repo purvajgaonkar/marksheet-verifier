@@ -34,8 +34,14 @@ class RootResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Returned by GET /health ."""
+    """Returned by GET /health . Used by deployment platforms to check liveness."""
     status: str = Field(..., examples=["ok"])
+    # Phase 10 deployment fields.
+    environment: Optional[str] = None
+    database: Optional[str] = None  # "connected" | "error"
+    llm_enabled: Optional[bool] = None
+    version: Optional[str] = None
+    # Original Phase 2 fields (kept for backward compatibility).
     tesseract_available: bool
     exiftool_available: bool
     tesseract_version: Optional[str] = None

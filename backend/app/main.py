@@ -19,11 +19,26 @@ Then open the interactive docs at:  http://localhost:8000/docs
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import config
 from app.init_db import init_db
+
+# ---------------------------------------------------------------------------
+# Logging (Phase 10). Basic, structured-enough logging. We deliberately never
+# log passwords, JWTs, API keys, setup secrets, or full document/OCR text.
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("marksheet")
 from app.routes import (
     admin_routes,
     auth_routes,
@@ -48,11 +63,12 @@ app = FastAPI(
         "automatically accuses or rejects a student, and a human reviewer makes "
         "the final decision."
     ),
-    version="0.2.0",  # Phase 2
+    version="0.10.0",  # Phase 10
 )
 
 # ---------------------------------------------------------------------------
-# CORS: allow the React dev servers to call this API from the browser.
+# CORS: only the configured frontend origin(s) may call this API from a browser.
+# Origins come from FRONTEND_URL via config; never a wildcard in production.
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +80,37 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
+# Global exception handlers (Phase 10).
+# In production we return safe, generic messages and never leak tracebacks.
+# In development we include the error detail to aid debugging.
+# ---------------------------------------------------------------------------
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid request.", "errors": exc.errors()},
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_handler(request: Request, exc: StarletteHTTPException):
+    # Pass through intended HTTP errors (401/403/404/…) with their detail.
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(Exception)
+async def _unhandled_handler(request: Request, exc: Exception):
+    # Log the full error server-side; return a safe message to the client.
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    detail = (
+        "Internal server error."
+        if config.IS_PRODUCTION
+        else f"Internal server error: {exc}"
+    )
+    return JSONResponse(status_code=500, content={"detail": detail})
+
+
+# ---------------------------------------------------------------------------
 # Make sure uploads/, reports/, forensic_outputs/ exist before serving.
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
@@ -71,6 +118,12 @@ def _on_startup() -> None:
     config.ensure_directories()
     # Phase 8: create tables, seed demo users, and backfill existing cases.
     init_db()
+    logger.info(
+        "Marksheet Verifier API started: environment=%s llm_enabled=%s db=%s",
+        config.ENVIRONMENT,
+        config.llm_is_available(),
+        config.DATABASE_URL.split("://", 1)[0],  # scheme only, never credentials
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -56,6 +56,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // If any authenticated request gets a 401 (expired/invalid token), the api
+  // layer clears the token and dispatches "mv:unauthorized" — reset state here
+  // so ProtectedRoute redirects to /login.
+  useEffect(() => {
+    function onUnauthorized() {
+      setUser(null);
+      setTokenState(null);
+    }
+    window.addEventListener("mv:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("mv:unauthorized", onUnauthorized);
+  }, []);
+
   const login = useCallback(async (email, password) => {
     const result = await loginUser({ email, password });
     setUser(result.user);

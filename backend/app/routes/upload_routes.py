@@ -40,7 +40,9 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
     file_bytes = await file.read()
 
     try:
-        result = await intake_service.run_intake(file_bytes, file.filename)
+        result = await intake_service.run_intake(
+            file_bytes, file.filename, content_type=file.content_type
+        )
     except intake_service.IntakeError as exc:
         # Bad file type / empty / analysis could not be performed.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
