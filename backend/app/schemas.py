@@ -72,3 +72,33 @@ class RagAskRequest(BaseModel):
     """Body for POST /rag/ask ."""
     question: str
     case_id: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: student + admin workflow
+# ---------------------------------------------------------------------------
+class StudentSubmitResponse(BaseModel):
+    """Safe student-facing response for POST /student/submit (no internal risk)."""
+    case_id: str
+    status: str
+    message: str
+    submitted_at: str
+    next_steps: list[str]
+
+
+class StudentStatusResponse(BaseModel):
+    """Safe student-facing status for GET /student/submission/{case_id}."""
+    case_id: str
+    status: str
+    message: str
+    submitted_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    action_required: bool = False
+    action_message: Optional[str] = None
+
+
+class AdminDecisionRequest(BaseModel):
+    """Body for POST /admin/cases/{case_id}/decision (a human reviewer action)."""
+    decision: str
+    reviewer_comment: Optional[str] = None
+    student_status: str

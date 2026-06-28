@@ -24,6 +24,11 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# --- Local database (Phase 8) — never commit the SQLite DB -----------
+*.db
+*.sqlite
+*.sqlite3
+
 # Virtual environments
 .venv/
 venv/

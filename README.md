@@ -20,15 +20,15 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–7 complete (CLI + API + UI + forensics + agents + RAG + optional Claude)
+## Project status: Phases 1–8 complete (CLI + API + UI + forensics + agents + RAG + Claude + database/workflow)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
 adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
-forensics (weak signals only), **Phase 5** reorganises the analysis as a local
-rule-based **agentic workflow**, **Phase 6** adds a local **RAG policy
-assistant**, and **Phase 7** adds an **optional Claude API** answer mode (the app
-still runs fully locally without any key). Later phases add metrics and Docker.
+forensics, **Phase 5** reorganises the analysis as a local rule-based **agentic
+workflow**, **Phase 6** adds a local **RAG policy assistant**, **Phase 7** adds an
+**optional Claude API** answer mode, and **Phase 8** adds a real **database +
+student/admin workflow + audit trail**. Later phases add metrics and Docker.
 
 ```
                  Phase 1: CLI analyzer            ✅
@@ -37,9 +37,10 @@ still runs fully locally without any key). Later phases add metrics and Docker.
                  Phase 4: Pixel/image forensics   ✅
                  Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
                  Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
-You are here ──► Phase 7: Optional Claude API     ✅  (key optional; local fallback)
-                 Phase 8: /metrics endpoint for Prometheus/Grafana
-                 Phase 9: Docker + Prometheus
+                 Phase 7: Optional Claude API     ✅  (key optional; local fallback)
+You are here ──► Phase 8: Database + workflow     ✅  (SQLite default; Postgres-ready)
+                 Phase 9: /metrics endpoint for Prometheus/Grafana
+                 Phase 10: Docker + Prometheus
 ```
 
 ## Quick start (full stack)
@@ -215,6 +216,110 @@ You will get:
   the backend does not persist them yet.
 
 ---
+
+## Database + student/admin workflow (Phase 8)
+
+Phase 8 turns the project into a small credential-verification platform with a
+real **persistence layer** (SQLAlchemy), a separate **student** and **admin**
+workflow, and an **audit trail**.
+
+**What the database adds**
+- Structured tables: `users`, `cases`, `student_submissions`, `review_decisions`,
+  `audit_logs`.
+- **SQLite by default** (a single local file, zero setup) and **PostgreSQL-ready**
+  via `DATABASE_URL`.
+- The DB stores case metadata + **file paths**, not raw bytes. Uploaded files
+  (`uploads/`) and JSON reports (`reports/`) are still on disk and **unchanged**.
+
+**Why SQLite locally / Postgres later:** SQLite needs no server and is perfect
+for development and demos. To deploy, set
+`DATABASE_URL=postgresql+psycopg://user:pass@host:5432/marksheet` and install a
+driver — no code changes.
+
+**Student portal** (`/student-upload`, `/track`)
+- Students submit a marksheet with their details and receive a **submission ID**.
+- They can track a **safe status** only: *submitted / processing / under review /
+  verified / re-upload required / official verification required / closed*.
+- Students **never** see the risk score, forensics score, metadata warnings,
+  agent trace, or AI explanation.
+
+**Admin portal** (`/admin`, case detail)
+- The dashboard lists cases from the database with admin fields.
+- The case page adds a **reviewer decision panel** (decision + reviewer comment +
+  student-facing status), a **decision history**, and an **audit trail** — on top
+  of the existing agent trace, forensics, and AI explanation panels.
+- The system never auto-decides; recording a decision is a **human action**.
+
+**Audit trail** records: `document_uploaded`, `analysis_started`,
+`analysis_completed`, `status_updated`, `review_decision`.
+
+### New endpoints
+
+| Method | Path | Who | Purpose |
+|--------|------|-----|---------|
+| `POST` | `/student/submit` | student | submit a marksheet (safe response) |
+| `GET`  | `/student/submission/{case_id}` | student | track status (safe, no risk) |
+| `GET`  | `/admin/cases` | admin | list cases with admin fields |
+| `GET`  | `/admin/cases/{case_id}` | admin | full detail (DB + report + history) |
+| `POST` | `/admin/cases/{case_id}/decision` | admin | record a human reviewer decision |
+| `GET`  | `/admin/cases/{case_id}/audit` | admin | the case audit trail |
+
+All previous endpoints (`/upload`, `/cases`, `/reports/{id}`, `/agent-trace`,
+`/rag/*`, `/forensics/*`, `/cases/{id}/explain`) are unchanged.
+
+### Initialize the database
+
+Tables, demo users, and a backfill of existing cases happen automatically on
+backend startup. To initialize manually:
+
+```powershell
+python -c "import sys; sys.path.insert(0,'backend'); from app.init_db import init_db; init_db()"
+```
+
+### Test Phase 8
+
+```powershell
+# A) Install requirements (adds sqlalchemy, alembic, passlib, python-jose)
+python -m pip install -r backend/requirements.txt
+
+# B) Ensure backend/.env has (DATABASE_URL is optional — defaults to local SQLite):
+#    DATABASE_URL=sqlite:///./marksheet_verifier.db
+#    ANTHROPIC_MODEL=claude-sonnet-4-6   (a current id; the 3.5 alias is retired)
+#    LLM_ENABLED=true                    (optional)
+
+# C) Start the backend from the project root
+python -m uvicorn app.main:app --reload --app-dir backend
+
+# D) Track a submission (paste a real case id)
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/student/submission/PASTE_CASE_ID"
+
+# E) Admin list
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/admin/cases"
+
+# F) Record a reviewer decision (human action)
+$body = @{
+  decision = "needs_more_documents"
+  reviewer_comment = "OCR confidence is moderate. Please request a clearer copy."
+  student_status = "reupload_required"
+} | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/admin/cases/PASTE_CASE_ID/decision" -Method POST -ContentType "application/json" -Body $body
+
+# G) Track again -> student now sees "reupload_required" + a safe action message
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/student/submission/PASTE_CASE_ID"
+
+# H) Frontend
+cd frontend
+npm run dev
+#   Student Upload -> submit -> copy ID -> Track Submission;
+#   Admin Dashboard -> open case -> add decision -> see audit trail.
+```
+
+> **Privacy & safety:** uploaded files are stored on disk in local development;
+> the database stores case metadata and paths. The DB file and `uploads/`,
+> `reports/`, `forensic_outputs/` are git-ignored. **Do not upload real student
+> documents to public demos** — use dummy/sample files only. Students see safe
+> statuses only, never internal risk details. See
+> [docs/ETHICS_AND_LIMITATIONS.md](docs/ETHICS_AND_LIMITATIONS.md).
 
 ## Optional Claude API mode (Phase 7)
 

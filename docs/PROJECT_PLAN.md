@@ -18,13 +18,15 @@ for human reviewers — it never auto-accuses or auto-rejects a student.
 | 4 | ✅ | Image/pixel forensics (ELA, edge, sharpness, noise, anomaly heatmap) |
 | 5 | ✅ | Local rule-based agentic orchestration |
 | 6 | ✅ | Local RAG policy assistant |
-| 7 | ✅ | **Optional Claude API RAG + explanation** (this phase) |
-| 8 | ⬜ | `/metrics` endpoint for Prometheus |
-| 9 | ⬜ | Docker + Prometheus + Grafana |
+| 7 | ✅ | Optional Claude API RAG + explanation |
+| 8 | ✅ | **Database + student/admin workflow + audit trail** (this phase) |
+| 9 | ⬜ | `/metrics` endpoint for Prometheus |
+| 10 | ⬜ | Docker + Prometheus + Grafana |
 
 Phases 1–6 require no external AI/LLM API at all. Phase 7 adds an **optional**
-Claude mode — the app still runs fully locally without any API key. No Docker,
-Prometheus, Grafana, PostgreSQL, Redis, or auth is required through Phase 7.
+Claude mode. Phase 8 adds a SQLAlchemy database (SQLite by default,
+PostgreSQL-ready) plus a student/admin workflow and an audit trail. No Docker,
+Prometheus, Grafana, Redis, MCP, or auth is required through Phase 8.
 
 ---
 
@@ -187,6 +189,54 @@ fallback. No API key is hardcoded or committed.
 Endpoints: `GET /rag/llm-status`, `POST /cases/{case_id}/explain`, and the
 enriched `POST /rag/ask`. Safety: Claude is an explanation aid only — it cannot
 change the risk score, status, reports, or any reviewer decision.
+
+---
+
+## Phase 8 architecture — database + workflow + audit trail
+
+Phase 8 turns the project into a small credential-verification platform: a real
+persistence layer (SQLAlchemy; SQLite by default, PostgreSQL-ready), a separate
+student vs admin workflow, and an append-only audit trail. The JSON report flow
+is unchanged — the database is an additional structured store that holds case
+metadata and FILE PATHS (never raw bytes).
+
+```
+  Student Upload (name, email, application id, board, year, file)
+        |
+        v
+   FastAPI  /student/submit
+        |
+        v
+   AI Analysis Pipeline (Phases 1-5: OCR, metadata, forensics, agents)
+        |
+        +--> uploads/<case>.png        (file on disk, unchanged)
+        +--> reports/<case>.json       (report on disk, unchanged)
+        |
+        v
+   Database Case record  + StudentSubmission + AuditLog
+   (case_id, status, admin_risk_label, risk_score, ocr_confidence,
+    metadata_flag_count, forensics_score, file_path, report_path)
+        |
+        +------------------ Safe Student Status ------------------+
+        |  GET /student/submission/{id}                           |
+        |  -> status + message + action (NO risk details shown)   |
+        |                                                         |
+        v                                                         v
+   Admin Review Dashboard  (GET /admin/cases, /admin/cases/{id})   Student portal
+        |  full signals, report, agent trace, forensics, history
+        v
+   Human Decision  (POST /admin/cases/{id}/decision)
+        |  decision + reviewer comment + new student-facing status
+        v
+   Audit Log  (document_uploaded, analysis_*, status_updated, review_decision)
+        |
+        v
+   Student sees the updated SAFE status on next tracking check.
+```
+
+Tables: `users`, `cases`, `student_submissions`, `review_decisions`,
+`audit_logs`. The system never auto-decides — only the human reviewer endpoint
+changes a case outcome.
 
 ---
 

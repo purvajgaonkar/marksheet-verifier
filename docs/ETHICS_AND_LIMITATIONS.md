@@ -159,6 +159,31 @@ It is convenience only, and these limits apply:
 
 ---
 
+## Student-facing results and data handling (Phase 8)
+
+Phase 8 separates the **student portal** from the **admin/reviewer portal**. This
+separation is an ethics requirement, not just a UI choice:
+
+- **Student-facing results must be limited.** Students see only a safe workflow
+  status (submitted / processing / under review / verified / re-upload required /
+  official verification required / closed) and a friendly message.
+- **Internal risk scores must NOT be shown to students.** The risk score,
+  forensics score, metadata warnings, agent trace, and AI explanation are
+  admin-only. A student is never told their document "looks suspicious".
+- **AI evidence is advisory.** Every automated signal assists the reviewer; none
+  of it decides.
+- **The human reviewer is responsible for the final decision.** Only the
+  database-backed reviewer decision endpoint (a human action) changes a case
+  outcome — the system never auto-decides.
+- **Official verification is preferred for high-impact decisions.** When the
+  outcome matters, request official board / DigiLocker / NAD verification rather
+  than relying on signals.
+- **Uploaded documents are sensitive data.** Store them carefully, never commit
+  real student documents (`uploads/`, `reports/`, `forensic_outputs/`, and the
+  database file are git-ignored), and use only dummy documents for demos.
+
+---
+
 ## Summary
 
 | Signal | Strength | Can be wrong because… |

@@ -6,6 +6,8 @@ import UploadPage from "./pages/UploadPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import CaseDetail from "./pages/CaseDetail";
 import PolicyAssistant from "./pages/PolicyAssistant";
+import StudentUpload from "./pages/StudentUpload";
+import StudentStatus from "./pages/StudentStatus";
 import { buttonVariants } from "./lib/utils";
 
 // A tiny 404 fallback so unknown URLs do not show a blank screen.
@@ -31,6 +33,8 @@ export default function App() {
         {/* All pages share the Layout shell (sidebar + navbar). */}
         <Route element={<Layout />}>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/student-upload" element={<StudentUpload />} />
+          <Route path="/track" element={<StudentStatus />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/assistant" element={<PolicyAssistant />} />

@@ -55,6 +55,25 @@ export const RISK_META = {
     dot: "bg-slate-400",
     Icon: HelpCircle,
   },
+  // Phase 8: admin-facing label aliases (stored in the database).
+  low_risk: {
+    label: "Low risk",
+    classes: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    dot: "bg-emerald-500",
+    Icon: ShieldCheck,
+  },
+  medium_risk: {
+    label: "Medium risk",
+    classes: "bg-amber-50 text-amber-700 ring-amber-200",
+    dot: "bg-amber-500",
+    Icon: ShieldAlert,
+  },
+  high_risk_signal: {
+    label: "High risk signal",
+    classes: "bg-red-50 text-red-700 ring-red-200",
+    dot: "bg-red-500",
+    Icon: AlertTriangle,
+  },
 };
 
 export function getRiskMeta(label) {

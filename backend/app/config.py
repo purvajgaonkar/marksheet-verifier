@@ -85,6 +85,16 @@ def llm_is_available() -> bool:
     """
     return bool(LLM_ENABLED and ANTHROPIC_API_KEY)
 
+
+# ---------------------------------------------------------------------------
+# Phase 8: database connection.
+# ---------------------------------------------------------------------------
+# Default to a local SQLite file at the project root so it works no matter
+# which directory the server is launched from. Override with DATABASE_URL to
+# use PostgreSQL (the app is PostgreSQL-ready).
+_DEFAULT_DATABASE_URL = f"sqlite:///{(PROJECT_ROOT / 'marksheet_verifier.db').as_posix()}"
+DATABASE_URL = (os.getenv("DATABASE_URL", "") or "").strip() or _DEFAULT_DATABASE_URL
+
 # ---------------------------------------------------------------------------
 # Accepted uploads
 # ---------------------------------------------------------------------------

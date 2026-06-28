@@ -1,11 +1,19 @@
 import { NavLink } from "react-router-dom";
-import { ShieldCheck, Home, Upload, LayoutDashboard, MessageSquareText } from "lucide-react";
+import {
+  ShieldCheck,
+  Home,
+  Upload,
+  Search,
+  LayoutDashboard,
+  MessageSquareText,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 
 // Navigation items shown in the left sidebar.
 const NAV_ITEMS = [
   { to: "/", label: "Home", Icon: Home, end: true },
-  { to: "/upload", label: "Upload Marksheet", Icon: Upload },
+  { to: "/student-upload", label: "Student Upload", Icon: Upload },
+  { to: "/track", label: "Track Submission", Icon: Search },
   { to: "/admin", label: "Admin Dashboard", Icon: LayoutDashboard },
   { to: "/assistant", label: "Policy Assistant", Icon: MessageSquareText },
 ];

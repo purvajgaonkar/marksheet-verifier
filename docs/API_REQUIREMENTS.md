@@ -100,3 +100,33 @@ retrieval. The app still runs fully without it.
 no credits, wrong model, network error), the request does **not** fail — it falls
 back to the local answer with `mode: local_retrieval_template_fallback` and an
 `llm_error` describing the problem.
+
+---
+
+## Phase 8 Database Requirements
+
+Phase 8 adds a real persistence layer with **SQLAlchemy**. No external database
+service is required for local development.
+
+- **`DATABASE_URL`** controls the connection. Set it in `backend/.env`.
+- **SQLite is the local default** — zero setup, a single file
+  (`marksheet_verifier.db`). Default value:
+  `DATABASE_URL=sqlite:///./marksheet_verifier.db`.
+- **PostgreSQL deployment-ready:** point `DATABASE_URL` at a Postgres instance
+  and install a driver — nothing else changes. Example:
+  `DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/marksheet`
+  (`pip install "psycopg[binary]"`).
+- **Files stay on disk.** The database stores case metadata and file **paths**,
+  not raw PDF/image bytes. Uploaded files (`uploads/`) and JSON reports
+  (`reports/`) are unchanged.
+- **No DB secrets in code.** `DATABASE_URL` is read from the environment;
+  `backend/.env` is git-ignored.
+
+### Initialize the database
+
+Tables are created automatically on FastAPI startup (and demo users + existing
+cases are backfilled). To initialize manually:
+
+```powershell
+python -c "import sys; sys.path.insert(0,'backend'); from app.init_db import init_db; init_db()"
+```

@@ -19,6 +19,10 @@ import {
   Sparkles,
   BookOpen,
   Loader2,
+  Send,
+  History,
+  ScrollText,
+  UserCircle2,
 } from "lucide-react";
 import RiskBadge, { getRiskMeta } from "../components/RiskBadge";
 import ReportSection from "../components/ReportSection";
@@ -27,29 +31,41 @@ import ForensicsPanel from "../components/ForensicsPanel";
 import AgentTracePanel from "../components/AgentTracePanel";
 import ErrorState from "../components/ErrorState";
 import { Skeleton } from "../components/Skeleton";
-import { getReport, generateCaseExplanation } from "../api";
-import { buttonVariants, cn } from "../lib/utils";
+import StatusBadge from "../components/StatusBadge";
+import { getReport, generateCaseExplanation, getAdminCase, postAdminDecision } from "../api";
+import { buttonVariants, cn, formatDateTime } from "../lib/utils";
 
 // ---------------------------------------------------------------------------
-// Reviewer decisions. NOTE: the Phase 2 backend does not persist reviewer
-// decisions yet, so we store the choice locally (localStorage) as a frontend-
-// only placeholder.
-// TODO(Phase 4+): replace localStorage with a real call, e.g.
-//   PATCH /cases/{caseId} { status: <decision> }
+// Phase 8: reviewer decisions are now persisted to the database via
+// POST /admin/cases/{case_id}/decision. The system never auto-decides — this
+// panel records a HUMAN reviewer's action and updates the student-facing status.
 // ---------------------------------------------------------------------------
-const DECISIONS = [
-  { key: "approved", label: "Approve", Icon: CheckCircle2, variant: "success" },
-  { key: "needs_more_documents", label: "Request more documents", Icon: FileQuestion, variant: "secondary" },
-  { key: "rejected_after_manual_review", label: "Reject (after manual review)", Icon: XCircle, variant: "danger" },
-  { key: "unable_to_verify", label: "Mark unable to verify", Icon: HelpCircle, variant: "outline" },
+const DECISION_OPTIONS = [
+  { value: "approved", label: "Approved" },
+  { value: "needs_more_documents", label: "Needs more documents" },
+  { value: "request_official_verification", label: "Request official verification" },
+  { value: "rejected_after_manual_review", label: "Rejected (after manual review)" },
+  { value: "unable_to_verify", label: "Unable to verify" },
 ];
 
-const DECISION_BTN = {
-  success: "bg-emerald-600 text-white hover:bg-emerald-700",
-  secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
-  danger: "bg-red-600 text-white hover:bg-red-700",
-  outline: "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50",
+const STUDENT_STATUS_OPTIONS = [
+  { value: "verified", label: "Verified" },
+  { value: "reupload_required", label: "Re-upload required" },
+  { value: "official_verification_required", label: "Official verification required" },
+  { value: "under_review", label: "Under review" },
+  { value: "closed", label: "Closed" },
+];
+
+// Sensible student-status default for each decision.
+const DECISION_TO_STATUS = {
+  approved: "verified",
+  needs_more_documents: "reupload_required",
+  request_official_verification: "official_verification_required",
+  rejected_after_manual_review: "closed",
+  unable_to_verify: "under_review",
 };
+
+const DECISION_LABELS = Object.fromEntries(DECISION_OPTIONS.map((d) => [d.value, d.label]));
 
 // A one-line, non-accusatory explanation of each risk label for the banner.
 const RISK_MEANING = {
@@ -111,8 +127,17 @@ export default function CaseDetail() {
   const [report, setReport] = useState(null);
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [error, setError] = useState("");
-  const [decision, setDecision] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Phase 8: database-backed case detail (status, decisions, audit trail).
+  const [admin, setAdmin] = useState(null);
+  const [form, setForm] = useState({
+    decision: "approved",
+    student_status: "verified",
+    reviewer_comment: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
 
   // Phase 7: optional LLM explanation of this case.
   const [explanation, setExplanation] = useState(null);
@@ -131,6 +156,14 @@ export default function CaseDetail() {
     }
   }
 
+  const loadAdmin = useCallback(async () => {
+    try {
+      setAdmin(await getAdminCase(caseId));
+    } catch {
+      setAdmin(null); // case may predate the DB; the report panels still work
+    }
+  }, [caseId]);
+
   const load = useCallback(async () => {
     setStatus("loading");
     setError("");
@@ -142,26 +175,38 @@ export default function CaseDetail() {
       setError(err.message || "Could not load report.");
       setStatus("error");
     }
-  }, [caseId]);
+    loadAdmin();
+  }, [caseId, loadAdmin]);
 
   useEffect(() => {
     load();
-    try {
-      const saved = localStorage.getItem(`review_${caseId}`);
-      if (saved) setDecision(saved);
-    } catch {
-      /* localStorage unavailable */
-    }
-  }, [load, caseId]);
+  }, [load]);
 
-  function recordDecision(key) {
-    setDecision(key);
+  // When the reviewer picks a decision, default the student status sensibly.
+  function setDecisionValue(value) {
+    setForm((f) => ({
+      ...f,
+      decision: value,
+      student_status: DECISION_TO_STATUS[value] || f.student_status,
+    }));
+  }
+
+  async function submitDecision() {
+    setSubmitting(true);
+    setDecisionError("");
     try {
-      localStorage.setItem(`review_${caseId}`, key);
-    } catch {
-      /* ignore */
+      await postAdminDecision(caseId, {
+        decision: form.decision,
+        reviewer_comment: form.reviewer_comment.trim() || null,
+        student_status: form.student_status,
+      });
+      setForm((f) => ({ ...f, reviewer_comment: "" }));
+      await loadAdmin();
+    } catch (err) {
+      setDecisionError(err.message || "Could not record the decision.");
+    } finally {
+      setSubmitting(false);
     }
-    // TODO(Phase 4+): persist to the backend instead of localStorage.
   }
 
   function copyCaseId() {
@@ -352,38 +397,118 @@ export default function CaseDetail() {
         )}
       </ReportSection>
 
-      {/* Reviewer actions */}
-      <ReportSection title="Reviewer decision" Icon={ClipboardCheck}>
+      {/* Reviewer decision (Phase 8, database-backed) */}
+      <ReportSection
+        title="Reviewer decision"
+        Icon={ClipboardCheck}
+        action={
+          admin?.case?.status ? <StatusBadge status={admin.case.status} size="sm" /> : null
+        }
+      >
         <p className="text-sm text-slate-500">
-          Record a manual review outcome. This is a recommendation workflow — the system
-          never auto-rejects a student.
+          Record a manual review outcome. This is a human decision — the system never
+          auto-rejects a student. It updates the student-facing status and the audit trail.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          {DECISIONS.map(({ key, label, Icon, variant }) => (
-            <button
-              key={key}
-              onClick={() => recordDecision(key)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-lg px-4 h-10 text-sm font-medium shadow-sm transition-colors",
-                DECISION_BTN[variant],
-                decision === key && "ring-2 ring-indigo-500 ring-offset-2"
-              )}
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Decision</span>
+            <select
+              value={form.decision}
+              onChange={(e) => setDecisionValue(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
+              {DECISION_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Student-facing status</span>
+            <select
+              value={form.student_status}
+              onChange={(e) => setForm((f) => ({ ...f, student_status: e.target.value }))}
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              {STUDENT_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
-        {decision && (
-          <p className="mt-3 text-xs text-slate-500">
-            Current decision:{" "}
-            <span className="font-medium text-slate-700">
-              {DECISIONS.find((d) => d.key === decision)?.label}
-            </span>{" "}
-            — saved locally in this browser only (not yet sent to the backend).
-          </p>
-        )}
+
+        <label className="mt-4 block">
+          <span className="text-xs font-medium text-slate-600">Reviewer comment</span>
+          <textarea
+            value={form.reviewer_comment}
+            onChange={(e) => setForm((f) => ({ ...f, reviewer_comment: e.target.value }))}
+            rows={3}
+            placeholder="e.g. OCR confidence is moderate. Requesting a clearer copy before final review."
+            className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+        </label>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={submitDecision}
+            disabled={submitting}
+            className={buttonVariants({ variant: "primary" })}
+          >
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Submit decision
+          </button>
+          {!admin && (
+            <span className="text-xs text-amber-700">
+              This case isn't in the database yet — decisions can't be recorded.
+            </span>
+          )}
+        </div>
+        {decisionError && <p className="mt-2 text-sm text-red-600">{decisionError}</p>}
       </ReportSection>
+
+      {/* Decision history + audit trail (Phase 8) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ReportSection title="Review decision history" Icon={History}>
+          {admin?.decisions?.length > 0 ? (
+            <ul className="space-y-3">
+              {[...admin.decisions].reverse().map((d) => (
+                <li key={d.id} className="rounded-lg bg-slate-50 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-slate-800">
+                      {DECISION_LABELS[d.decision] || d.decision}
+                    </span>
+                    <span className="text-xs text-slate-400">{formatDateTime(d.created_at)}</span>
+                  </div>
+                  {d.reviewer_comment && (
+                    <p className="mt-1 text-xs text-slate-600">{d.reviewer_comment}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">No reviewer decisions recorded yet.</p>
+          )}
+        </ReportSection>
+
+        <ReportSection title="Audit trail" Icon={ScrollText}>
+          {admin?.audit_logs?.length > 0 ? (
+            <ul className="space-y-2">
+              {[...admin.audit_logs].reverse().map((a) => (
+                <li key={a.id} className="flex items-start gap-2 text-xs">
+                  <UserCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-300" />
+                  <div>
+                    <span className="font-medium text-slate-700">{a.action.replaceAll("_", " ")}</span>
+                    <span className="text-slate-400"> · {formatDateTime(a.created_at)}</span>
+                    {a.details && <p className="text-slate-500">{a.details}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">No audit entries yet.</p>
+          )}
+        </ReportSection>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Detected fields */}

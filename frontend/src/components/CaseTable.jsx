@@ -4,13 +4,21 @@ import { Eye } from "lucide-react";
 import RiskBadge from "./RiskBadge";
 import { buttonVariants, formatDateTime } from "../lib/utils";
 
-// Friendly labels for the reviewer status field stored on each case.
+// Friendly labels for the status field stored on each case.
 const STATUS_LABELS = {
+  // Phase 8 student-facing workflow statuses
+  submitted: "Submitted",
+  processing: "Processing",
+  under_review: "Under review",
+  verified: "Verified",
+  reupload_required: "Re-upload required",
+  official_verification_required: "Official verification required",
+  closed: "Closed",
+  // legacy reviewer statuses (kept for backward compatibility)
   pending_review: "Pending review",
   approved: "Approved",
   needs_more_documents: "Needs more documents",
   rejected_after_manual_review: "Rejected (manual review)",
-  unable_to_verify: "Unable to verify",
 };
 
 function StatusText({ status }) {

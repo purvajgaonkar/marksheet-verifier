@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { ShieldCheck, Home, Upload, LayoutDashboard, MessageSquareText } from "lucide-react";
+import { ShieldCheck, Home, Upload, Search, LayoutDashboard, MessageSquareText } from "lucide-react";
 import { getHealth } from "../api";
 import { cn } from "../lib/utils";
 
 // Map a route path to a friendly page title shown in the top bar.
 function titleForPath(pathname) {
   if (pathname === "/") return "Overview";
+  if (pathname.startsWith("/student-upload")) return "Student Upload";
+  if (pathname.startsWith("/track")) return "Track Submission";
   if (pathname.startsWith("/upload")) return "Upload Marksheet";
   if (pathname.startsWith("/admin")) return "Admin Dashboard";
+  if (pathname.startsWith("/assistant")) return "Policy Assistant";
   if (pathname.startsWith("/cases/")) return "Case Detail";
   return "Marksheet Verifier";
 }
@@ -16,7 +19,8 @@ function titleForPath(pathname) {
 // Compact nav shown only on small screens, where the sidebar is hidden.
 const MOBILE_NAV = [
   { to: "/", Icon: Home, end: true, label: "Home" },
-  { to: "/upload", Icon: Upload, label: "Upload" },
+  { to: "/student-upload", Icon: Upload, label: "Submit" },
+  { to: "/track", Icon: Search, label: "Track" },
   { to: "/admin", Icon: LayoutDashboard, label: "Admin" },
   { to: "/assistant", Icon: MessageSquareText, label: "Assistant" },
 ];

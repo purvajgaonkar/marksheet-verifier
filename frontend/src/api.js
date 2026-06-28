@@ -132,6 +132,79 @@ export async function generateCaseExplanation(caseId) {
   return response.json();
 }
 
+// ---------------------------------------------------------------------------
+// Phase 8: student + admin workflow
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /student/submit -> submit a marksheet with optional details.
+ * `fields` is an object: { student_name, student_email, application_id,
+ * board_name, exam_year }. Returns a SAFE student-facing response (no risk).
+ */
+export async function submitStudentMarksheet(file, fields = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) formData.append(key, value);
+  }
+  const response = await fetch(`${API_BASE_URL}/student/submit`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** GET /student/submission/{caseId} -> safe student-facing status. */
+export async function getStudentSubmission(caseId) {
+  const response = await fetch(
+    `${API_BASE_URL}/student/submission/${encodeURIComponent(caseId)}`
+  );
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** GET /admin/cases -> { count, cases: [...] } with admin fields. */
+export async function getAdminCases() {
+  const response = await fetch(`${API_BASE_URL}/admin/cases`);
+  if (!response.ok) throw new Error(await readError(response));
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.cases ?? [];
+}
+
+/** GET /admin/cases/{caseId} -> { case, submission, report, decisions, audit_logs }. */
+export async function getAdminCase(caseId) {
+  const response = await fetch(`${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}`);
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
+ * POST /admin/cases/{caseId}/decision -> record a human reviewer decision.
+ * `body` = { decision, reviewer_comment, student_status }.
+ */
+export async function postAdminDecision(caseId, body) {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** GET /admin/cases/{caseId}/audit -> { case_id, audit_logs: [...] }. */
+export async function getAdminAudit(caseId) {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/audit`
+  );
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
 /**
  * GET /cases/{caseId}/agent-trace -> the agentic_workflow section for a case
  * (Phase 5). For older reports it returns { available: false, message }.

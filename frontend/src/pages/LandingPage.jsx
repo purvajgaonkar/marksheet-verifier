@@ -141,7 +141,7 @@ export default function LandingPage() {
 
             <FadeUp delay={0.18}>
               <div className="mt-7 flex flex-wrap gap-3">
-                <Link to="/upload" className={buttonVariants({ variant: "primary", size: "lg" })}>
+                <Link to="/student-upload" className={buttonVariants({ variant: "primary", size: "lg" })}>
                   <Upload className="h-5 w-5" />
                   Upload Marksheet
                 </Link>
@@ -227,7 +227,7 @@ export default function LandingPage() {
               board verification is always stronger than image analysis.
             </p>
             <Link
-              to="/upload"
+              to="/student-upload"
               className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:text-indigo-800"
             >
               Get started <ArrowRight className="h-4 w-4" />

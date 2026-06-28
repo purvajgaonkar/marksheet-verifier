@@ -14,8 +14,14 @@ import CaseTable from "../components/CaseTable";
 import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ErrorState";
 import { StatCardSkeleton, TableSkeleton } from "../components/Skeleton";
-import { getCases } from "../api";
+import { getAdminCases } from "../api";
 import { buttonVariants, cn, formatDateTime } from "../lib/utils";
+
+// Bucket helpers that work for BOTH internal labels (verified/low/...) and the
+// Phase 8 admin labels (low_risk/medium_risk/high_risk_signal/...).
+const _LOW = new Set(["verified", "low", "low_risk"]);
+const _REVIEW = new Set(["medium", "medium_risk", "needs_review"]);
+const _HIGH = new Set(["high", "high_risk_signal"]);
 
 // Group risk labels into the four dashboard buckets.
 function summarise(cases) {
@@ -23,10 +29,10 @@ function summarise(cases) {
   let ocrSum = 0;
   let ocrCount = 0;
   for (const c of cases) {
-    const label = c.risk_label;
-    if (label === "verified" || label === "low") counts.low += 1;
-    else if (label === "medium" || label === "needs_review") counts.review += 1;
-    else if (label === "high") counts.high += 1;
+    const label = c.risk_label || c.admin_risk_label;
+    if (_LOW.has(label)) counts.low += 1;
+    else if (_REVIEW.has(label)) counts.review += 1;
+    else if (_HIGH.has(label)) counts.high += 1;
     if (typeof c.ocr_confidence === "number") {
       ocrSum += c.ocr_confidence;
       ocrCount += 1;
@@ -39,9 +45,9 @@ function summarise(cases) {
 // Risk filter chips (each maps to a set of backend labels).
 const FILTERS = [
   { key: "all", label: "All", match: () => true },
-  { key: "low", label: "Low", match: (l) => l === "verified" || l === "low" },
-  { key: "review", label: "Needs review", match: (l) => l === "medium" || l === "needs_review" },
-  { key: "high", label: "High", match: (l) => l === "high" },
+  { key: "low", label: "Low", match: (l) => _LOW.has(l) },
+  { key: "review", label: "Needs review", match: (l) => _REVIEW.has(l) },
+  { key: "high", label: "High", match: (l) => _HIGH.has(l) },
 ];
 
 export default function AdminDashboard() {
@@ -56,7 +62,7 @@ export default function AdminDashboard() {
     setStatus("loading");
     setError("");
     try {
-      const data = await getCases();
+      const data = await getAdminCases();
       setCases(data);
       setStatus("ready");
       setRefreshedAt(new Date().toISOString());
