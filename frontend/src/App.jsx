@@ -5,6 +5,7 @@ import LandingPage from "./pages/LandingPage";
 import UploadPage from "./pages/UploadPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import CaseDetail from "./pages/CaseDetail";
+import PolicyAssistant from "./pages/PolicyAssistant";
 import { buttonVariants } from "./lib/utils";
 
 // A tiny 404 fallback so unknown URLs do not show a blank screen.
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/assistant" element={<PolicyAssistant />} />
           <Route path="/cases/:caseId" element={<CaseDetail />} />
           <Route path="*" element={<NotFound />} />
         </Route>

@@ -31,6 +31,8 @@ PROJECT_ROOT = BACKEND_DIR.parent
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 FORENSIC_OUTPUTS_DIR = PROJECT_ROOT / "forensic_outputs"
+# Phase 6: the local policy documents the RAG assistant retrieves from.
+DOCS_DIR = PROJECT_ROOT / "docs"
 
 # The tiny local "database": a JSON file listing every case.
 CASES_INDEX_PATH = REPORTS_DIR / "cases_index.json"

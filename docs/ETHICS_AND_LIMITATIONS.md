@@ -112,6 +112,28 @@ it is and is not:
 
 ---
 
+## RAG Assistant Limitations
+
+Phase 6 adds a local Policy Assistant that answers reviewer questions using the
+project's own documents (a local TF-IDF retriever + template answers; no LLM, no
+external API). Use it as guidance, with these limits in mind:
+
+- **The assistant is guidance only.** It helps reviewers understand the rules,
+  ethics, and next steps — it does not make decisions.
+- **Retrieved policy documents may be incomplete or out of date.** The answer is
+  only as good as the `docs/` it indexes; after editing the docs, call
+  `POST /rag/reindex`.
+- **No final admission decision is made by the assistant.** It never approves or
+  rejects a student.
+- **Sources should be reviewed by a human.** Every answer cites the document
+  chunks it used; open them to confirm the context.
+- **High-stakes decisions require official verification.** Verifying against the
+  issuing board / DigiLocker / NAD outweighs anything the assistant says.
+- **Answers are extractive/templated, not authoritative interpretation.** The
+  current local mode quotes policy text; it does not reason like a human expert.
+
+---
+
 ## Summary
 
 | Signal | Strength | Can be wrong because… |

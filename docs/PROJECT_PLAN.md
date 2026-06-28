@@ -16,12 +16,13 @@ for human reviewers — it never auto-accuses or auto-rejects a student.
 | 2 | ✅ | FastAPI backend: upload, cases, reports (local JSON store) |
 | 3 | ✅ | Polished React + Vite frontend (dashboard, case detail) |
 | 4 | ✅ | Image/pixel forensics (ELA, edge, sharpness, noise, anomaly heatmap) |
-| 5 | ✅ | **Local rule-based agentic orchestration** (this phase) |
-| 6 | ⬜ | `/metrics` endpoint for Prometheus |
-| 7 | ⬜ | Docker + Prometheus + Grafana |
+| 5 | ✅ | Local rule-based agentic orchestration |
+| 6 | ✅ | **Local RAG policy assistant** (this phase) |
+| 7 | ⬜ | `/metrics` endpoint for Prometheus |
+| 8 | ⬜ | Docker + Prometheus + Grafana |
 
 No external AI/LLM API, Docker, Prometheus, Grafana, PostgreSQL, Redis, or auth
-is required for Phases 1–5. Everything runs locally.
+is required for Phases 1–6. Everything runs locally.
 
 ---
 
@@ -97,6 +98,47 @@ The agents are local rule-based modules. They reuse Tesseract, ExifTool, OpenCV,
 Pillow, NumPy, and PyMuPDF — all installed locally. No Claude/OpenAI/Gemini/
 Hugging Face/DigiLocker API is called. (Claude Code, used to *build* this
 project, is unrelated to the project's runtime and requires no project API key.)
+
+---
+
+## Phase 6 architecture — local RAG policy assistant
+
+A reviewer can ask plain-English questions ("Why is this case needs_review?",
+"Are pixel forensics proof?") and get answers grounded in the project's own
+policy documents. It is **fully local**: a TF-IDF index over `docs/` plus a
+deterministic template answer generator. No LLM, no external API, no API key.
+
+```
+        Reviewer Question (+ optional case_id)
+                       |
+                       v
+                  +-----------+
+                  | RAG Route |   POST /rag/ask
+                  +-----------+
+                       |
+       +---------------+-----------------+
+       v                                 v
+  Case Summary Loader (optional)    Document Loader (docs/*.md -> chunks)
+  (risk, OCR, flags, anomaly,            |
+   human-review recommendation)         v
+       |                          Local Retriever (TF-IDF, scikit-learn)
+       |                                 |  top chunks
+       +---------------+-----------------+
+                       v
+            Template Answer Generator
+       (extractive sentences + case context,
+        non-accusatory wording, always cites sources)
+                       |
+                       v
+              Sources + Answer (JSON)
+                       |
+                       v
+            Frontend Policy Assistant (/assistant)
+```
+
+Endpoints: `POST /rag/ask`, `GET /rag/sources`, `POST /rag/reindex`. Knowledge
+documents: `PROJECT_PLAN.md`, `ETHICS_AND_LIMITATIONS.md`, `API_REQUIREMENTS.md`,
+`REVIEWER_GUIDELINES.md`, `RAG_POLICY_KNOWLEDGE.md`.
 
 ---
 

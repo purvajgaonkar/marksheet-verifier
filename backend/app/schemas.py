@@ -66,3 +66,9 @@ class CaseListResponse(BaseModel):
     """Returned by GET /cases ."""
     count: int
     cases: list[CaseSummary]
+
+
+class RagAskRequest(BaseModel):
+    """Body for POST /rag/ask ."""
+    question: str
+    case_id: Optional[str] = None

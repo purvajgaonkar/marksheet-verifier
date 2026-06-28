@@ -20,22 +20,24 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–5 complete (CLI + API + UI + forensics + agents)
+## Project status: Phases 1–6 complete (CLI + API + UI + forensics + agents + RAG)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
 adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
-forensics (weak signals only), and **Phase 5** reorganises the analysis as a
-local rule-based **agentic workflow**. Later phases add metrics and Docker.
+forensics (weak signals only), **Phase 5** reorganises the analysis as a local
+rule-based **agentic workflow**, and **Phase 6** adds a local **RAG policy
+assistant**. Later phases add metrics and Docker.
 
 ```
                  Phase 1: CLI analyzer            ✅
                  Phase 2: FastAPI backend         ✅
                  Phase 3: React frontend (Vite)   ✅
                  Phase 4: Pixel/image forensics   ✅
-You are here ──► Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
-                 Phase 6: /metrics endpoint for Prometheus/Grafana
-                 Phase 7: Docker + Prometheus
+                 Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
+You are here ──► Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
+                 Phase 7: /metrics endpoint for Prometheus/Grafana
+                 Phase 8: Docker + Prometheus
 ```
 
 ## Quick start (full stack)
@@ -211,6 +213,76 @@ You will get:
   the backend does not persist them yet.
 
 ---
+
+## RAG policy assistant (Phase 6)
+
+Phase 6 adds a **local Retrieval-Augmented Generation (RAG)** policy assistant.
+Reviewers can ask questions like *"Why is this case needs_review?"*, *"What
+should I do if metadata shows Photoshop?"*, or *"Are pixel forensics proof?"* and
+get answers grounded in the project's own policy documents.
+
+**What "RAG" means here:** the assistant **retrieves** the most relevant passages
+from `docs/` and **generates** an answer from them. In this MVP, generation is a
+deterministic template that quotes the retrieved policy text (extractive) — there
+is **no LLM**.
+
+**Why no API key is required:** retrieval uses a local **TF-IDF** index
+(scikit-learn) built from local markdown files; answers are assembled from the
+retrieved sentences with templates. No Claude/OpenAI/Gemini/Hugging Face API is
+called.
+
+**How local retrieval works:**
+1. Read every `.md` file in `docs/`.
+2. Split into ~500–1000 character chunks (kept with their headings).
+3. Build a TF-IDF matrix in memory; rank chunks by cosine similarity to the question.
+4. Return the top chunks; extract the most relevant sentences into a concise answer.
+5. If `case_id` is given, prepend a short case summary (risk label/score, OCR
+   confidence, metadata flag count, forensics anomaly, human-review recommendation).
+
+**Knowledge documents:** `PROJECT_PLAN.md`, `ETHICS_AND_LIMITATIONS.md`,
+`API_REQUIREMENTS.md`, `REVIEWER_GUIDELINES.md`, `RAG_POLICY_KNOWLEDGE.md`.
+
+**Endpoints:** `POST /rag/ask` (optionally case-aware), `GET /rag/sources`,
+`POST /rag/reindex` (rebuild the index after editing docs).
+
+**In the UI:** a new **Policy Assistant** page (`/assistant`) with a chat-like
+interface, starter-question chips, an optional case dropdown, and the sources +
+limitations for every answer. The Case Detail page has an **"Ask Policy Assistant
+about this case"** button that opens the assistant pre-scoped to that case.
+
+### Test Phase 6
+
+```powershell
+# A) Install/update backend requirements (adds scikit-learn)
+python -m pip install -r backend/requirements.txt
+
+# B) Start the backend (from the project root)
+python -m uvicorn app.main:app --reload --app-dir backend
+
+# C) List indexed documents
+curl.exe http://127.0.0.1:8000/rag/sources
+
+# D) Ask a general policy question
+curl.exe -X POST http://127.0.0.1:8000/rag/ask -H "Content-Type: application/json" -d '{"question":"Are pixel forensics proof of tampering?"}'
+
+# E) Ask about a specific case (paste a real case id from GET /cases)
+curl.exe -X POST http://127.0.0.1:8000/rag/ask -H "Content-Type: application/json" -d '{"question":"Why is this case marked the way it is?","case_id":"PASTE_CASE_ID"}'
+
+# F) Frontend
+cd frontend
+npm run dev
+#    open http://localhost:5173 -> Policy Assistant
+```
+
+> **Limitations of local template answers:** answers quote existing policy text
+> rather than reasoning like a human expert, and are only as complete as the
+> `docs/`. They are guidance, never a decision. See
+> [docs/ETHICS_AND_LIMITATIONS.md](docs/ETHICS_AND_LIMITATIONS.md) →
+> *"RAG Assistant Limitations"*.
+>
+> **Future upgrade (optional LLM mode):** a later phase could add an optional
+> Claude/OpenAI API key to phrase answers more naturally on top of the same
+> retrieved context. The app is designed to work fully **without** any LLM key.
 
 ## Agentic orchestration (Phase 5)
 

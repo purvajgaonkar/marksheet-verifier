@@ -22,7 +22,11 @@ uvicorn[standard]>=0.29.0  # the ASGI server that runs FastAPI
 python-multipart>=0.0.9    # required by FastAPI to receive file uploads
 # (pydantic is installed automatically as a FastAPI dependency)
 
-# --- Phase 6: metrics (added later) ----------------------------------
+# --- Phase 6: local RAG policy assistant (REQUIRED now) --------------
+scikit-learn>=1.5.0        # local TF-IDF retrieval over docs/ (no external API)
+# (numpy/scipy are pulled in automatically by scikit-learn)
+
+# --- Phase 7: metrics (added later) ----------------------------------
 # prometheus-client>=0.20.0
 
 # Note: Tesseract OCR and ExifTool are EXTERNAL programs, not pip packages.

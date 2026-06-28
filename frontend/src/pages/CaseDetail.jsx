@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Copy,
   Check,
+  MessageSquareText,
 } from "lucide-react";
 import RiskBadge, { getRiskMeta } from "../components/RiskBadge";
 import ReportSection from "../components/ReportSection";
@@ -23,7 +24,7 @@ import AgentTracePanel from "../components/AgentTracePanel";
 import ErrorState from "../components/ErrorState";
 import { Skeleton } from "../components/Skeleton";
 import { getReport } from "../api";
-import { cn } from "../lib/utils";
+import { buttonVariants, cn } from "../lib/utils";
 
 // ---------------------------------------------------------------------------
 // Reviewer decisions. NOTE: the Phase 2 backend does not persist reviewer
@@ -222,7 +223,16 @@ export default function CaseDetail() {
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">Analyzed {report.analyzed_at || "—"}</p>
           </div>
-          <RiskBadge label={risk.label} />
+          <div className="flex flex-col items-end gap-2">
+            <RiskBadge label={risk.label} />
+            <Link
+              to={`/assistant?case_id=${encodeURIComponent(report.case_id || caseId)}`}
+              className={buttonVariants({ variant: "secondary", size: "sm" })}
+            >
+              <MessageSquareText className="h-3.5 w-3.5" />
+              Ask Policy Assistant about this case
+            </Link>
+          </div>
         </div>
 
         {/* Quick metrics */}

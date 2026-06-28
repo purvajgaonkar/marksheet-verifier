@@ -78,6 +78,37 @@ export async function getForensics(caseId) {
 }
 
 /**
+ * POST /rag/ask -> ask the local Policy Assistant a question (optionally about
+ * a specific case). Returns { question, answer, sources, case_summary, mode,
+ * limitations }.
+ */
+export async function askPolicyAssistant(question, caseId) {
+  const body = { question };
+  if (caseId) body.case_id = caseId;
+  const response = await fetch(`${API_BASE_URL}/rag/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** GET /rag/sources -> { documents, chunk_count, mode }. */
+export async function getRagSources() {
+  const response = await fetch(`${API_BASE_URL}/rag/sources`);
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** POST /rag/reindex -> rebuild the local index from docs/. */
+export async function reindexRag() {
+  const response = await fetch(`${API_BASE_URL}/rag/reindex`, { method: "POST" });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
  * GET /cases/{caseId}/agent-trace -> the agentic_workflow section for a case
  * (Phase 5). For older reports it returns { available: false, message }.
  * The CaseDetail page already has this data from the full report, so this is

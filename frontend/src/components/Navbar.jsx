@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { ShieldCheck, Home, Upload, LayoutDashboard } from "lucide-react";
+import { ShieldCheck, Home, Upload, LayoutDashboard, MessageSquareText } from "lucide-react";
 import { getHealth } from "../api";
 import { cn } from "../lib/utils";
 
@@ -18,6 +18,7 @@ const MOBILE_NAV = [
   { to: "/", Icon: Home, end: true, label: "Home" },
   { to: "/upload", Icon: Upload, label: "Upload" },
   { to: "/admin", Icon: LayoutDashboard, label: "Admin" },
+  { to: "/assistant", Icon: MessageSquareText, label: "Assistant" },
 ];
 
 // Small connection indicator: checks the backend /health endpoint on mount.
