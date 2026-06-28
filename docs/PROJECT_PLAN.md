@@ -19,14 +19,17 @@ for human reviewers — it never auto-accuses or auto-rejects a student.
 | 5 | ✅ | Local rule-based agentic orchestration |
 | 6 | ✅ | Local RAG policy assistant |
 | 7 | ✅ | Optional Claude API RAG + explanation |
-| 8 | ✅ | **Database + student/admin workflow + audit trail** (this phase) |
-| 9 | ⬜ | `/metrics` endpoint for Prometheus |
-| 10 | ⬜ | Docker + Prometheus + Grafana |
+| 8 | ✅ | Database + student/admin workflow + audit trail |
+| 9 | ✅ | **Authentication + role-based access control** (this phase) |
+| 10 | ⬜ | `/metrics` endpoint for Prometheus |
+| 11 | ⬜ | Docker + Prometheus + Grafana |
 
 Phases 1–6 require no external AI/LLM API at all. Phase 7 adds an **optional**
 Claude mode. Phase 8 adds a SQLAlchemy database (SQLite by default,
-PostgreSQL-ready) plus a student/admin workflow and an audit trail. No Docker,
-Prometheus, Grafana, Redis, MCP, or auth is required through Phase 8.
+PostgreSQL-ready) plus a student/admin workflow and an audit trail. Phase 9 adds
+email/password authentication with JWT access tokens and role-based access
+control (student vs admin/reviewer). No Docker, Prometheus, Grafana, Redis, MCP,
+or external identity provider is required through Phase 9.
 
 ---
 
@@ -237,6 +240,49 @@ metadata and FILE PATHS (never raw bytes).
 Tables: `users`, `cases`, `student_submissions`, `review_decisions`,
 `audit_logs`. The system never auto-decides — only the human reviewer endpoint
 changes a case outcome.
+
+---
+
+## Phase 9 architecture — authentication + role-based access control
+
+Phase 9 secures the workflow with email/password login, JWT access tokens, and
+role checks. Passwords are hashed (bcrypt via passlib); tokens are signed JWTs
+(python-jose) carrying the user id and role.
+
+```
+  User → Login / Register
+        |
+        v
+   FastAPI Auth Routes  (/auth/register, /auth/login, /auth/me)
+        |
+        +--> Register: hash password (bcrypt)  → store User(role=student)
+        |
+        +--> Login: verify password → issue JWT { sub: user_id, role }
+        |
+        v
+   Frontend stores JWT (localStorage) and sends it as
+   "Authorization: Bearer <token>" on every protected request
+        |
+        v
+   Auth dependency: decode JWT → load active User → enforce ROLE
+        |
+        +───────────────┬───────────────────────────────┐
+        v               v                                v
+   require_student   require_admin_or_reviewer      (no/invalid token)
+        |               |                                |
+        v               v                                v
+   Student Portal    Admin / Reviewer Portal           401 Unauthorized
+   - submit (own)    - list all cases                  (student → admin = 403)
+   - my submissions  - case detail + signals
+   - track own case  - record human decision
+   (safe data only)  - audit trail
+```
+
+Roles: `student` (self-registered) and `admin` / `reviewer` (created server-side
+via `backend/create_admin.py`). Students only ever see safe statuses; internal AI
+risk details are admin/reviewer-only. Authentication changes *who sees what* — it
+does not let the AI decide; a human reviewer's recorded decision is still the only
+thing that changes a case outcome.
 
 ---
 

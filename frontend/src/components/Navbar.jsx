@@ -1,14 +1,27 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { ShieldCheck, Home, Upload, Search, LayoutDashboard, MessageSquareText } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  ShieldCheck,
+  Home,
+  Upload,
+  Search,
+  LayoutDashboard,
+  MessageSquareText,
+  LogIn,
+  UserPlus,
+  LogOut,
+} from "lucide-react";
 import { getHealth } from "../api";
 import { cn } from "../lib/utils";
+import { useAuth } from "../context/AuthContext";
 
 // Map a route path to a friendly page title shown in the top bar.
 function titleForPath(pathname) {
   if (pathname === "/") return "Overview";
+  if (pathname.startsWith("/login")) return "Sign in";
+  if (pathname.startsWith("/register")) return "Create account";
   if (pathname.startsWith("/student-upload")) return "Student Upload";
-  if (pathname.startsWith("/track")) return "Track Submission";
+  if (pathname.startsWith("/track")) return "My Submissions";
   if (pathname.startsWith("/upload")) return "Upload Marksheet";
   if (pathname.startsWith("/admin")) return "Admin Dashboard";
   if (pathname.startsWith("/assistant")) return "Policy Assistant";
@@ -16,14 +29,17 @@ function titleForPath(pathname) {
   return "Marksheet Verifier";
 }
 
-// Compact nav shown only on small screens, where the sidebar is hidden.
-const MOBILE_NAV = [
-  { to: "/", Icon: Home, end: true, label: "Home" },
-  { to: "/student-upload", Icon: Upload, label: "Submit" },
-  { to: "/track", Icon: Search, label: "Track" },
-  { to: "/admin", Icon: LayoutDashboard, label: "Admin" },
-  { to: "/assistant", Icon: MessageSquareText, label: "Assistant" },
-];
+// Compact nav shown only on small screens, computed from the auth state.
+function mobileNavFor(user) {
+  const home = { to: "/", Icon: Home, end: true, label: "Home" };
+  if (!user) {
+    return [home, { to: "/login", Icon: LogIn, label: "Login" }, { to: "/register", Icon: UserPlus, label: "Register" }];
+  }
+  if (user.role === "student") {
+    return [home, { to: "/student-upload", Icon: Upload, label: "Submit" }, { to: "/track", Icon: Search, label: "Track" }];
+  }
+  return [home, { to: "/admin", Icon: LayoutDashboard, label: "Admin" }, { to: "/assistant", Icon: MessageSquareText, label: "Assistant" }];
+}
 
 // Small connection indicator: checks the backend /health endpoint on mount.
 function HealthPill() {
@@ -62,6 +78,15 @@ function HealthPill() {
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const mobileNav = mobileNavFor(user);
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
       <div className="flex h-16 items-center justify-between px-4 md:px-8">
@@ -83,12 +108,32 @@ export default function Navbar() {
           </p>
         </div>
 
-        <HealthPill />
+        <div className="flex items-center gap-3">
+          <HealthPill />
+          {user ? (
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              title={`Signed in as ${user.email} (${user.role})`}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          ) : (
+            <NavLink
+              to="/login"
+              className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Sign in</span>
+            </NavLink>
+          )}
+        </div>
       </div>
 
       {/* Mobile nav row */}
       <nav className="flex items-center gap-1 border-t border-slate-100 px-2 py-1.5 md:hidden">
-        {MOBILE_NAV.map(({ to, Icon, label, end }) => (
+        {mobileNav.map(({ to, Icon, label, end }) => (
           <NavLink
             key={to}
             to={to}

@@ -26,6 +26,7 @@ from app import config
 from app.init_db import init_db
 from app.routes import (
     admin_routes,
+    auth_routes,
     case_routes,
     forensic_routes,
     health_routes,
@@ -98,5 +99,6 @@ app.include_router(upload_routes.router)
 app.include_router(case_routes.router)
 app.include_router(forensic_routes.router)
 app.include_router(rag_routes.router)
+app.include_router(auth_routes.router)
 app.include_router(student_routes.router)
 app.include_router(admin_routes.router)

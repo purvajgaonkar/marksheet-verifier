@@ -95,6 +95,20 @@ def llm_is_available() -> bool:
 _DEFAULT_DATABASE_URL = f"sqlite:///{(PROJECT_ROOT / 'marksheet_verifier.db').as_posix()}"
 DATABASE_URL = (os.getenv("DATABASE_URL", "") or "").strip() or _DEFAULT_DATABASE_URL
 
+
+# ---------------------------------------------------------------------------
+# Phase 9: authentication (JWT).
+# ---------------------------------------------------------------------------
+# The default secret is fine for LOCAL development only. For any real
+# deployment, set a long random JWT_SECRET_KEY in the environment / .env.
+JWT_SECRET_KEY = (os.getenv("JWT_SECRET_KEY", "") or "").strip() or "dev-insecure-change-me"
+JWT_ALGORITHM = (os.getenv("JWT_ALGORITHM", "") or "").strip() or "HS256"
+
+try:
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+except (TypeError, ValueError):
+    ACCESS_TOKEN_EXPIRE_MINUTES = 120
+
 # ---------------------------------------------------------------------------
 # Accepted uploads
 # ---------------------------------------------------------------------------

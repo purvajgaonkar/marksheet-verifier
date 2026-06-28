@@ -119,11 +119,12 @@ def sync_intake(
     forensics_score: Optional[float],
     status: str,
     student_info: Optional[dict] = None,
+    student_user_id: Optional[int] = None,
 ) -> str:
     """
-    Create/update the Case row for a fresh upload, link a StudentSubmission and
-    student user if details were provided, and write the audit trail. Returns
-    the stored status. Opens and commits its own session.
+    Create/update the Case row for a fresh upload, link the owning student
+    (by id, or by email), attach a StudentSubmission, and write the audit trail.
+    Returns the stored status. Opens and commits its own session.
     """
     with session_scope() as db:
         case = get_case(db, case_id)
@@ -141,13 +142,19 @@ def sync_intake(
         case.forensics_score = forensics_score
         case.status = status
 
-        # Link a student user + submission record when student details exist.
-        if student_info:
+        # Ownership: prefer the authenticated student id (Phase 9); otherwise
+        # fall back to linking by email (Phase 8 behaviour).
+        if student_user_id is not None:
+            case.student_id = student_user_id
+        elif student_info and student_info.get("student_email"):
             student = get_or_create_student(
                 db, student_info.get("student_email"), student_info.get("student_name")
             )
             if student is not None:
                 case.student_id = student.id
+
+        # Link a student submission record when student details exist.
+        if student_info:
             db.flush()  # ensure case.id exists for the FK
             submission = case.submission or m.StudentSubmission(case_id=case.id)
             submission.student_name = student_info.get("student_name")

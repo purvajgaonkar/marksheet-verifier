@@ -130,3 +130,57 @@ cases are backfilled). To initialize manually:
 ```powershell
 python -c "import sys; sys.path.insert(0,'backend'); from app.init_db import init_db; init_db()"
 ```
+
+---
+
+## Phase 9 Authentication Requirements
+
+Phase 9 adds email/password authentication with **JWT access tokens** and
+role-based access control. New environment variables (add to `backend/.env`):
+
+| Variable | Default (dev) | Purpose |
+|----------|---------------|---------|
+| `JWT_SECRET_KEY` | `dev-insecure-change-me` | Secret used to sign/verify JWTs. **Change for production.** |
+| `JWT_ALGORITHM` | `HS256` | JWT signing algorithm. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `120` | Access-token lifetime in minutes. |
+
+```env
+JWT_SECRET_KEY=change_this_to_a_strong_secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+```
+
+Generate a strong secret:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+**Python packages** (already in `backend/requirements.txt`):
+`passlib[bcrypt]`, `bcrypt<4.1` (passlib 1.7.4 is incompatible with bcrypt ≥ 4.1),
+`python-jose[cryptography]`, `email-validator`.
+
+### Roles & protected endpoints
+
+| Role | Can access |
+|------|-----------|
+| `student` | `/auth/*`, `/student/submit`, `/student/my-submissions`, `/student/submission/{id}` (own cases only) |
+| `admin`, `reviewer` | all admin routes: `/admin/cases`, `/admin/cases/{id}`, `/admin/cases/{id}/decision`, `/admin/cases/{id}/audit` |
+
+Public registration (`POST /auth/register`) **always** creates a `student`.
+Admin/reviewer accounts are created server-side with `backend/create_admin.py`.
+
+### Auth endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/auth/register` | public | create a student account |
+| `POST` | `/auth/login` | public | get a JWT + safe user info |
+| `GET`  | `/auth/me` | bearer token | current user |
+| `POST` | `/auth/logout` | bearer token | client discards token (stateless) |
+
+Send the token as `Authorization: Bearer <token>` on protected requests. JWTs are
+stateless: "logout" simply discards the token client-side.
+
+> Still **not** needed: no external auth provider, OAuth, SSO, email/SMS, or
+> third-party identity service. Authentication is local username/password + JWT.

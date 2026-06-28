@@ -14,6 +14,27 @@ import {
   Check,
 } from "lucide-react";
 import { buttonVariants } from "../lib/utils";
+import { useAuth } from "../context/AuthContext";
+
+// Route the hero CTAs by the current auth state / role (Phase 9).
+function ctaTargets(user) {
+  if (!user) {
+    return {
+      primary: { to: "/register", label: "Get started" },
+      secondary: { to: "/login", label: "Sign in" },
+    };
+  }
+  if (user.role === "student") {
+    return {
+      primary: { to: "/student-upload", label: "Upload Marksheet" },
+      secondary: { to: "/track", label: "Track My Submissions" },
+    };
+  }
+  return {
+    primary: { to: "/admin", label: "Open Admin Dashboard" },
+    secondary: { to: "/assistant", label: "Policy Assistant" },
+  };
+}
 
 const FEATURES = [
   {
@@ -111,6 +132,8 @@ function ReportPreview() {
 }
 
 export default function LandingPage() {
+  const { user } = useAuth();
+  const cta = ctaTargets(user);
   return (
     <div className="space-y-14">
       {/* Hero */}
@@ -141,13 +164,13 @@ export default function LandingPage() {
 
             <FadeUp delay={0.18}>
               <div className="mt-7 flex flex-wrap gap-3">
-                <Link to="/student-upload" className={buttonVariants({ variant: "primary", size: "lg" })}>
+                <Link to={cta.primary.to} className={buttonVariants({ variant: "primary", size: "lg" })}>
                   <Upload className="h-5 w-5" />
-                  Upload Marksheet
+                  {cta.primary.label}
                 </Link>
-                <Link to="/admin" className={buttonVariants({ variant: "secondary", size: "lg" })}>
+                <Link to={cta.secondary.to} className={buttonVariants({ variant: "secondary", size: "lg" })}>
                   <LayoutDashboard className="h-5 w-5" />
-                  Open Admin Dashboard
+                  {cta.secondary.label}
                 </Link>
               </div>
             </FadeUp>
@@ -227,10 +250,10 @@ export default function LandingPage() {
               board verification is always stronger than image analysis.
             </p>
             <Link
-              to="/student-upload"
+              to={cta.primary.to}
               className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:text-indigo-800"
             >
-              Get started <ArrowRight className="h-4 w-4" />
+              {cta.primary.label} <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </section>

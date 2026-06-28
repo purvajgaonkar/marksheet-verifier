@@ -27,7 +27,13 @@ router = APIRouter(tags=["upload"])
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload(file: UploadFile = File(...)) -> UploadResponse:
-    """Accept a marksheet upload, analyze it, persist it, and return a summary."""
+    """Accept a marksheet upload, analyze it, persist it, and return a summary.
+
+    NOTE (Phase 9): this is a LEGACY, UNAUTHENTICATED developer endpoint kept for
+    backward compatibility (it returns internal risk fields). The student-facing
+    flow is POST /student/submit (requires student login). Do not expose /upload
+    to students. The frontend does not link it in the navigation.
+    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
 

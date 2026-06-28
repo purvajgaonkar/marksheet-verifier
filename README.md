@@ -20,15 +20,16 @@ against the board".)
 
 ---
 
-## Project status: Phases 1–8 complete (CLI + API + UI + forensics + agents + RAG + Claude + database/workflow)
+## Project status: Phases 1–9 complete (CLI + API + UI + forensics + agents + RAG + Claude + database/workflow + auth)
 
 The project is built in phases. **Phase 1** is the offline command-line
 analyzer, **Phase 2** wraps the same pipeline in a FastAPI backend, **Phase 3**
 adds a polished React + Vite dashboard, **Phase 4** adds local image/pixel
 forensics, **Phase 5** reorganises the analysis as a local rule-based **agentic
 workflow**, **Phase 6** adds a local **RAG policy assistant**, **Phase 7** adds an
-**optional Claude API** answer mode, and **Phase 8** adds a real **database +
-student/admin workflow + audit trail**. Later phases add metrics and Docker.
+**optional Claude API** answer mode, **Phase 8** adds a real **database +
+student/admin workflow + audit trail**, and **Phase 9** adds **authentication +
+role-based access control** (JWT). Later phases add metrics and Docker.
 
 ```
                  Phase 1: CLI analyzer            ✅
@@ -38,9 +39,10 @@ student/admin workflow + audit trail**. Later phases add metrics and Docker.
                  Phase 5: Agentic orchestration   ✅  (local rules, no external AI)
                  Phase 6: RAG policy assistant    ✅  (local TF-IDF, no API key)
                  Phase 7: Optional Claude API     ✅  (key optional; local fallback)
-You are here ──► Phase 8: Database + workflow     ✅  (SQLite default; Postgres-ready)
-                 Phase 9: /metrics endpoint for Prometheus/Grafana
-                 Phase 10: Docker + Prometheus
+                 Phase 8: Database + workflow     ✅  (SQLite default; Postgres-ready)
+You are here ──► Phase 9: Auth + RBAC (JWT)       ✅  (student vs admin/reviewer)
+                 Phase 10: /metrics endpoint for Prometheus/Grafana
+                 Phase 11: Docker + Prometheus
 ```
 
 ## Quick start (full stack)
@@ -214,6 +216,115 @@ You will get:
   official APIs and is out of scope for the MVP).
 - Reviewer decisions in the UI are saved in the browser only (localStorage);
   the backend does not persist them yet.
+
+---
+
+## Authentication + role-based access control (Phase 9)
+
+Phase 9 secures the workflow with **email/password login**, **JWT access tokens**,
+and **role-based access control**. Passwords are hashed with bcrypt (via passlib);
+tokens are signed JWTs (python-jose). Nothing about the AI changes — auth controls
+*who can see what*; a human reviewer is still the only thing that decides a case.
+
+**Roles**
+
+| Role | How it's created | Can access |
+|------|------------------|-----------|
+| `student` | self-registration (`/register`) | submit & track **their own** marksheets; only safe statuses |
+| `admin`, `reviewer` | server-side via `create_admin.py` | admin dashboard, case detail + signals, record decisions, audit trail |
+
+**Student vs admin permissions**
+- A student only ever sees safe statuses for **their own** submissions. The risk
+  score, forensics score, metadata warnings, agent trace, and AI explanation are
+  **never** returned to a student.
+- Admin/reviewer routes are protected: **no token → 401**, **student token → 403**.
+- Public registration always creates a **student** — you cannot self-register as
+  admin/reviewer.
+
+**How JWT works here (high level):** you log in with email + password → the
+backend verifies the bcrypt hash and returns a signed JWT containing your user id
+and role → the frontend stores it (localStorage) and sends it as
+`Authorization: Bearer <token>` on every protected request → a FastAPI dependency
+decodes the token, loads the active user, and enforces the role. JWTs are
+stateless, so **logout** simply discards the token client-side.
+
+**Auth environment variables** (add to `backend/.env`):
+
+```env
+JWT_SECRET_KEY=replace_with_a_long_random_secret   # CHANGE for production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+```
+
+Generate a strong secret: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+
+### Create the first admin / reviewer
+
+Admin and reviewer accounts are **not** self-registerable. Create one from the
+backend folder (you'll be prompted for email, name, role, and a hidden password —
+nothing is hardcoded):
+
+```powershell
+cd backend
+python create_admin.py
+```
+
+### Register / log in as a student
+
+- In the UI: open **Register**, create a student account (auto-logs you in), then
+  use **Student Upload** and **Track My Submissions**.
+- Or via API:
+
+```powershell
+# Register (always creates a student)
+$body = @{ email="student@example.com"; full_name="Demo Student"; password="StrongPassword123" } | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8000/auth/register" -Method Post -ContentType "application/json" -Body $body
+
+# Login -> returns { access_token, token_type, user }
+$body = @{ email="student@example.com"; password="StrongPassword123" } | ConvertTo-Json
+$login = Invoke-RestMethod "http://127.0.0.1:8000/auth/login" -Method Post -ContentType "application/json" -Body $body
+$token = $login.access_token
+
+# Use the token on protected requests
+Invoke-RestMethod "http://127.0.0.1:8000/auth/me" -Headers @{ Authorization = "Bearer $token" }
+Invoke-RestMethod "http://127.0.0.1:8000/student/my-submissions" -Headers @{ Authorization = "Bearer $token" }
+```
+
+### How protected routes work (frontend)
+
+- An `AuthProvider` holds the user + token and restores the session from a stored
+  token on load.
+- `ProtectedRoute` requires a logged-in user; `RoleProtectedRoute` additionally
+  restricts a page to given roles.
+- Student pages (Student Upload, Track My Submissions) require a **student** login;
+  Admin Dashboard, Case Detail, and Policy Assistant require **admin/reviewer**.
+  The navigation only shows links appropriate to your role.
+
+### New auth endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/auth/register` | public | create a student account |
+| `POST` | `/auth/login` | public | get a JWT + safe user info |
+| `GET`  | `/auth/me` | bearer | current user |
+| `POST` | `/auth/logout` | bearer | client discards token |
+| `GET`  | `/student/my-submissions` | student | list **your** submissions (safe) |
+
+Phase 8 routes are now protected: `/student/submit` and
+`/student/submission/{id}` require a student login (and enforce ownership); all
+`/admin/*` routes require admin/reviewer.
+
+### Security limitations for a demo deployment
+
+- **Do not commit `backend/.env`** (it's git-ignored). Set secrets via environment
+  variables.
+- **`JWT_SECRET_KEY` must be changed** from the dev default for any real use.
+- This is a student-grade baseline: **no** refresh-token rotation, rate limiting,
+  account lockout, password reset, or MFA. Don't expose it publicly with real
+  student data.
+- Legacy dev endpoints (`/upload`, `/cases`, `/reports/{id}`,
+  `/cases/{id}/agent-trace`) remain **unauthenticated** for backward compatibility
+  and expose internal fields — keep them local-only; the student UI never uses them.
 
 ---
 

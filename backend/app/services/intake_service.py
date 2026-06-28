@@ -50,6 +50,7 @@ async def run_intake(
     original_filename: str,
     *,
     student_info: Optional[dict] = None,
+    student_user_id: Optional[int] = None,
 ) -> dict:
     """
     Process one uploaded file end-to-end. Returns a dict with the case_id, the
@@ -135,6 +136,7 @@ async def run_intake(
         forensics_score=forensics_score,
         status=status,
         student_info=student_info,
+        student_user_id=student_user_id,
     )
 
     return {

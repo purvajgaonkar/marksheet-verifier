@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, AnimatePresence } from "motion/react";
-import { Send, CheckCircle2, Copy, Check, ArrowRight, AlertCircle, Info } from "lucide-react";
+import { motion } from "motion/react";
+import { Send, CheckCircle2, Copy, Check, ArrowRight, AlertCircle, Info, UserCircle2 } from "lucide-react";
 import FileUpload from "../components/FileUpload";
 import StatusBadge from "../components/StatusBadge";
 import { submitStudentMarksheet } from "../api";
+import { useAuth } from "../context/AuthContext";
 import { buttonVariants } from "../lib/utils";
 
 // A single labelled text input.
@@ -27,9 +28,8 @@ function Field({ label, value, onChange, type = "text", placeholder, required })
 }
 
 export default function StudentUpload() {
+  const { user } = useAuth();
   const [form, setForm] = useState({
-    student_name: "",
-    student_email: "",
     application_id: "",
     board_name: "",
     exam_year: "",
@@ -67,7 +67,7 @@ export default function StudentUpload() {
   }
 
   function reset() {
-    setForm({ student_name: "", student_email: "", application_id: "", board_name: "", exam_year: "" });
+    setForm({ application_id: "", board_name: "", exam_year: "" });
     setFile(null);
     setResult(null);
     setError("");
@@ -151,9 +151,18 @@ export default function StudentUpload() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Signed-in identity (read-only — comes from your account) */}
+        <div className="mb-4 flex items-center gap-2.5 rounded-lg bg-slate-50 px-3 py-2.5">
+          <UserCircle2 className="h-8 w-8 shrink-0 text-slate-400" />
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-medium text-slate-800">
+              {user?.full_name || "Student"}
+            </p>
+            <p className="truncate text-xs text-slate-500">{user?.email}</p>
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" value={form.student_name} onChange={set("student_name")} placeholder="Your name" />
-          <Field label="Email" type="email" value={form.student_email} onChange={set("student_email")} placeholder="you@example.com" />
           <Field label="Application ID" value={form.application_id} onChange={set("application_id")} placeholder="e.g. APP-2026-001" />
           <Field label="Board (optional)" value={form.board_name} onChange={set("board_name")} placeholder="e.g. CBSE / ICSE / State Board" />
           <Field label="Exam year (optional)" value={form.exam_year} onChange={set("exam_year")} placeholder="e.g. 2020" />

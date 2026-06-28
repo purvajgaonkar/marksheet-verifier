@@ -8,6 +8,10 @@ import CaseDetail from "./pages/CaseDetail";
 import PolicyAssistant from "./pages/PolicyAssistant";
 import StudentUpload from "./pages/StudentUpload";
 import StudentStatus from "./pages/StudentStatus";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import { AuthProvider } from "./context/AuthContext";
+import { ProtectedRoute, RoleProtectedRoute } from "./components/ProtectedRoute";
 import { buttonVariants } from "./lib/utils";
 
 // A tiny 404 fallback so unknown URLs do not show a blank screen.
@@ -26,22 +30,78 @@ function NotFound() {
   );
 }
 
+// Staff-only roles for admin/reviewer pages.
+const STAFF = ["admin", "reviewer"];
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* All pages share the Layout shell (sidebar + navbar). */}
-        <Route element={<Layout />}>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/student-upload" element={<StudentUpload />} />
-          <Route path="/track" element={<StudentStatus />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/assistant" element={<PolicyAssistant />} />
-          <Route path="/cases/:caseId" element={<CaseDetail />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          {/* All pages share the Layout shell (sidebar + navbar). */}
+          <Route element={<Layout />}>
+            {/* Public */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* Student-only (requires login) */}
+            <Route
+              path="/student-upload"
+              element={
+                <ProtectedRoute roles={["student"]}>
+                  <StudentUpload />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/track"
+              element={
+                <ProtectedRoute roles={["student"]}>
+                  <StudentStatus />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Admin / reviewer only */}
+            <Route
+              path="/admin"
+              element={
+                <RoleProtectedRoute roles={STAFF}>
+                  <AdminDashboard />
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/cases/:caseId"
+              element={
+                <RoleProtectedRoute roles={STAFF}>
+                  <CaseDetail />
+                </RoleProtectedRoute>
+              }
+            />
+            <Route
+              path="/assistant"
+              element={
+                <RoleProtectedRoute roles={STAFF}>
+                  <PolicyAssistant />
+                </RoleProtectedRoute>
+              }
+            />
+            {/* Legacy dev upload page — staff only (not linked in nav) */}
+            <Route
+              path="/upload"
+              element={
+                <RoleProtectedRoute roles={STAFF}>
+                  <UploadPage />
+                </RoleProtectedRoute>
+              }
+            />
+
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

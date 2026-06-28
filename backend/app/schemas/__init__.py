@@ -1,14 +1,13 @@
 """
-schemas.py
-==========
+schemas package
+===============
 
-Pydantic models that describe the SHAPE of our API responses.
+Pydantic models describing the SHAPE of our API responses/requests.
 
-These give us two things for free:
-    * automatic request/response validation, and
-    * a nicely documented interactive API at /docs (Swagger UI).
-
-They are intentionally small and match exactly what the routes return.
+Phase 9 turned the old single-file `schemas.py` into this package so auth
+schemas can live in their own module. Everything is re-exported here, so the
+existing `from app.schemas import UploadResponse` style imports keep working,
+and `from app.schemas.auth_schemas import UserCreate` works too.
 """
 
 from __future__ import annotations
@@ -16,6 +15,14 @@ from __future__ import annotations
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+# Re-export the auth schemas so `from app.schemas import UserCreate` works.
+from app.schemas.auth_schemas import (  # noqa: F401
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 
 
 class RootResponse(BaseModel):
@@ -92,6 +99,17 @@ class StudentStatusResponse(BaseModel):
     status: str
     message: str
     submitted_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    action_required: bool = False
+    action_message: Optional[str] = None
+
+
+class StudentSubmissionItem(BaseModel):
+    """One row in GET /student/my-submissions (safe, no internal risk)."""
+    case_id: str
+    original_filename: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
     updated_at: Optional[str] = None
     action_required: bool = False
     action_message: Optional[str] = None

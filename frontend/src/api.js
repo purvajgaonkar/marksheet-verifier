@@ -26,6 +26,36 @@ async function readError(response) {
   return `Request failed (HTTP ${response.status})`;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 9: auth token storage + helpers
+// ---------------------------------------------------------------------------
+const TOKEN_KEY = "mv_token";
+
+/** Read the stored JWT (or null). */
+export function getToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Store the JWT (pass null/undefined to clear it). */
+export function setToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
+/** Merge an Authorization header onto `extra` when a token is present. */
+function authHeaders(extra = {}) {
+  const token = getToken();
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
+
 /** GET /health -> { status, tesseract_available, exiftool_available, ... } */
 export async function getHealth() {
   const response = await fetch(`${API_BASE_URL}/health`);
@@ -147,26 +177,38 @@ export async function submitStudentMarksheet(file, fields = {}) {
   for (const [key, value] of Object.entries(fields)) {
     if (value) formData.append(key, value);
   }
+  // Authenticated student upload (Phase 9). Do NOT set Content-Type for FormData.
   const response = await fetch(`${API_BASE_URL}/student/submit`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
 
-/** GET /student/submission/{caseId} -> safe student-facing status. */
+/** GET /student/submission/{caseId} -> safe status for the logged-in student. */
 export async function getStudentSubmission(caseId) {
   const response = await fetch(
-    `${API_BASE_URL}/student/submission/${encodeURIComponent(caseId)}`
+    `${API_BASE_URL}/student/submission/${encodeURIComponent(caseId)}`,
+    { headers: authHeaders() }
   );
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
 
-/** GET /admin/cases -> { count, cases: [...] } with admin fields. */
+/** GET /student/my-submissions -> safe list of the logged-in student's cases. */
+export async function getMySubmissions() {
+  const response = await fetch(`${API_BASE_URL}/student/my-submissions`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** GET /admin/cases -> { count, cases: [...] } with admin fields (admin/reviewer). */
 export async function getAdminCases() {
-  const response = await fetch(`${API_BASE_URL}/admin/cases`);
+  const response = await fetch(`${API_BASE_URL}/admin/cases`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
   return Array.isArray(data) ? data : data.cases ?? [];
@@ -174,7 +216,9 @@ export async function getAdminCases() {
 
 /** GET /admin/cases/{caseId} -> { case, submission, report, decisions, audit_logs }. */
 export async function getAdminCase(caseId) {
-  const response = await fetch(`${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}`);
+  const response = await fetch(`${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -188,7 +232,7 @@ export async function postAdminDecision(caseId, body) {
     `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/decision`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     }
   );
@@ -199,10 +243,65 @@ export async function postAdminDecision(caseId, body) {
 /** GET /admin/cases/{caseId}/audit -> { case_id, audit_logs: [...] }. */
 export async function getAdminAudit(caseId) {
   const response = await fetch(
-    `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/audit`
+    `${API_BASE_URL}/admin/cases/${encodeURIComponent(caseId)}/audit`,
+    { headers: authHeaders() }
   );
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9: authentication
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /auth/register -> create a STUDENT account.
+ * `data` = { email, full_name, password }. Returns the safe user object.
+ */
+export async function registerUser(data) {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/**
+ * POST /auth/login -> { access_token, token_type, user }.
+ * Stores the token for subsequent authenticated requests.
+ */
+export async function loginUser(data) {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  const result = await response.json();
+  if (result.access_token) setToken(result.access_token);
+  return result;
+}
+
+/** GET /auth/me -> the current user (requires a valid token). */
+export async function getCurrentUser() {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+/** POST /auth/logout -> best-effort server call, then clears the local token. */
+export async function logoutUser() {
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+  } catch {
+    /* ignore network errors on logout */
+  }
+  setToken(null);
 }
 
 /**

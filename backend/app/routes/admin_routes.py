@@ -21,11 +21,13 @@ from sqlalchemy import select
 
 from app import config
 from app.database import get_db
+from app.dependencies.auth_dependencies import require_admin_or_reviewer
 from app.models import db_models as m
 from app.schemas import AdminDecisionRequest
 from app.services import persistence_service
 
-router = APIRouter(tags=["admin"])
+# Every route in this router requires an authenticated admin OR reviewer (Phase 9).
+router = APIRouter(tags=["admin"], dependencies=[Depends(require_admin_or_reviewer)])
 
 
 def _load_report(case_id: str) -> dict | None:
@@ -69,7 +71,12 @@ def get_case_detail(case_id: str, db=Depends(get_db)) -> dict:
 
 
 @router.post("/admin/cases/{case_id}/decision")
-def record_decision(case_id: str, body: AdminDecisionRequest, db=Depends(get_db)) -> dict:
+def record_decision(
+    case_id: str,
+    body: AdminDecisionRequest,
+    reviewer: m.User = Depends(require_admin_or_reviewer),
+    db=Depends(get_db),
+) -> dict:
     """Record a reviewer decision and update the student-facing status."""
     case = persistence_service.get_case(db, case_id)
     if case is None:
@@ -98,6 +105,7 @@ def record_decision(case_id: str, body: AdminDecisionRequest, db=Depends(get_db)
         decision=body.decision,
         reviewer_comment=body.reviewer_comment,
         student_status=body.student_status,
+        reviewer_id=reviewer.id,
     )
     db.commit()
     db.refresh(case)

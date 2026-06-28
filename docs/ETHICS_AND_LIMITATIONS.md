@@ -184,6 +184,38 @@ separation is an ethics requirement, not just a UI choice:
 
 ---
 
+## Authentication & access control (Phase 9)
+
+Phase 9 puts the sensitive document workflow behind authentication and role-based
+access control. The ethics rationale:
+
+- **Students should not see internal AI risk scores.** Authenticated student
+  views remain limited to safe statuses — the risk score, forensics score,
+  metadata warnings, agent trace, and AI explanation are never returned to a
+  student account.
+- **Students can only see their own submissions.** Ownership is enforced
+  server-side; one student cannot view another student's case (the API returns a
+  generic "not found" rather than confirming a case exists).
+- **Admin/reviewer access must be restricted.** Admin and reviewer tools are
+  protected; a request with no token is rejected (401) and a student token is
+  refused (403). Staff accounts are created server-side, never self-registered.
+- **Authentication protects sensitive document workflows.** Uploaded marksheets
+  contain personal data; gating upload, tracking, and review behind login reduces
+  casual exposure.
+- **AI remains advisory and human-reviewed.** Auth changes *who* can see what; it
+  does not change the core principle — automated signals assist a human, and only
+  a human reviewer's recorded decision changes a case outcome.
+- **Secrets are configuration, not code.** `JWT_SECRET_KEY` and any API keys are
+  read from the environment. `backend/.env` is git-ignored and the default dev
+  secret must be replaced for any real deployment.
+
+This is a student project: the auth layer is a reasonable baseline (hashed
+passwords, signed JWTs, role checks) but is **not** a hardened production identity
+system — there is no refresh-token rotation, rate limiting, account lockout,
+password reset, or MFA.
+
+---
+
 ## Summary
 
 | Signal | Strength | Can be wrong because… |
