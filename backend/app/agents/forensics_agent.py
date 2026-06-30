@@ -12,6 +12,7 @@ false positives. This agent never overclaims.
 
 from __future__ import annotations
 
+from app import config
 from app.agents.base_agent import BaseAgent
 from app.services import forensics_service
 
@@ -20,6 +21,27 @@ class ForensicsAgent(BaseAgent):
     name = "Forensics Agent"
 
     def execute(self, context: dict) -> dict:
+        # Phase 11: skip the heavy OpenCV forensics when disabled (e.g. on small
+        # free-tier hosts where it would starve the CPU and trigger health-check
+        # restarts). The rest of the pipeline treats forensics as "unavailable",
+        # which is already handled by the risk engine and the decision agent.
+        if not config.FORENSICS_ENABLED:
+            context["forensics"] = {
+                "available": False,
+                "skipped": True,
+                "reason": "Image forensics is disabled in this environment.",
+            }
+            return {
+                "summary": "Image forensics skipped (disabled in this environment).",
+                "confidence": 0.0,
+                "findings": [],
+                "warnings": [
+                    "Pixel forensics is disabled here; OCR, metadata, and rule "
+                    "checks still ran. Run locally for the full forensic analysis."
+                ],
+                "status": "completed_with_warnings",
+            }
+
         forensics = forensics_service.run_forensics(
             context["input_path"],
             context["base_name"],

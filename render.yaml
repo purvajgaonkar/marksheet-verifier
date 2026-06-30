@@ -69,3 +69,9 @@ services:
         value: "10"
       - key: ALLOWED_UPLOAD_EXTENSIONS
         value: .pdf,.png,.jpg,.jpeg
+
+      # --- Heavy image forensics (off on free tier; see DEPLOYMENT_GUIDE) --
+      # The OpenCV forensics step is too heavy for the free 0.1-CPU instance
+      # (it starves the health check and restarts the app mid-upload).
+      - key: FORENSICS_ENABLED
+        value: "false"

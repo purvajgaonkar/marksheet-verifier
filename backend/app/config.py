@@ -182,6 +182,17 @@ ALLOWED_UPLOAD_EXTENSIONS = (
 SUPPORTED_EXTENSIONS = ALLOWED_UPLOAD_EXTENSIONS
 
 # ---------------------------------------------------------------------------
+# Phase 11: optional heavy image-forensics (deployment toggle).
+# ---------------------------------------------------------------------------
+# The pixel-forensics step (OpenCV ELA / edge / noise / heatmaps) is CPU- and
+# memory-heavy. On tiny free-tier instances it can saturate the CPU long enough
+# that the platform's health check times out and restarts the container mid-
+# upload. Set FORENSICS_ENABLED=false there to skip ONLY this step — OCR,
+# metadata, rule checks, the agentic workflow, risk scoring, and the Claude
+# assistant all still run. Defaults ON (full analysis) for local development.
+FORENSICS_ENABLED = _parse_bool(os.getenv("FORENSICS_ENABLED"), default=True)
+
+# ---------------------------------------------------------------------------
 # CORS: which web origins may call this API from a browser.
 # Origins come from FRONTEND_URL (comma-separated). In development we also allow
 # the common local dev ports. We NEVER use a wildcard ("*") in production.
