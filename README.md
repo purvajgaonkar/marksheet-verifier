@@ -247,10 +247,15 @@ Deployed:     Vercel       ->  Render (FastAPI) ->  Supabase/Neon Postgres  ->  
                 (HTTPS, CORS restricted to FRONTEND_URL)            (* ephemeral on free tier)
 ```
 
-**Live links** (fill in after you deploy):
+**Live links:**
 
-- Frontend demo: `TO_BE_ADDED_AFTER_DEPLOYMENT`
-- Backend health: `TO_BE_ADDED_AFTER_DEPLOYMENT` (e.g. `https://<your-backend>.onrender.com/health`)
+- 🌐 Frontend demo: **https://marksheet-verifier-hazel.vercel.app**
+- ❤️ Backend health: **https://marksheet-verifier-backend.onrender.com/health**
+
+> Notes: the backend runs on a free Render instance, so the **first request after
+> idle can take ~50s** (cold start). The deployed build runs OCR, metadata,
+> agentic analysis, risk scoring, and the Claude assistant; the heaviest pixel-
+> forensics step is disabled there to fit the free tier (it runs in full locally).
 
 **Deploy in brief** (full steps + screenshots-worth of detail in the guide):
 
