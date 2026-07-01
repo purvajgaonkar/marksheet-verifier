@@ -10,6 +10,9 @@ uploads/
 reports/
 forensic_outputs/
 
+# Locally-generated demo/test marksheets (kept on your machine, uploaded by hand)
+sample_marksheets/
+
 # Keep the folders in git (so a fresh clone has them) but ignore contents.
 # To use this, create an empty `.gitkeep` file in each folder. The rules
 # above ignore everything; the lines below re-include the .gitkeep markers.
