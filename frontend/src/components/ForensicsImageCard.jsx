@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImageOff, ImageIcon } from "lucide-react";
 
 /**
@@ -10,9 +10,21 @@ import { ImageOff, ImageIcon } from "lucide-react";
  *   title    - heading (e.g. "Anomaly Heatmap")
  *   caption  - short description under the title
  *   src      - image URL (or null/undefined if not available)
+ *
+ * Note: `src` arrives ASYNCHRONOUSLY (the forensic URLs are fetched after the
+ * card first renders), so we must re-sync the load state whenever `src`
+ * changes — otherwise a card that mounted before the URL arrived would stay
+ * stuck on "Image not available" and never render the <img>.
  */
 export default function ForensicsImageCard({ title, caption, src }) {
-  const [state, setState] = useState(src ? "loading" : "missing"); // loading | loaded | error | missing
+  const [state, setState] = useState("loading"); // loading | loaded | error
+
+  // Reset to "loading" each time a (new) src arrives.
+  useEffect(() => {
+    setState("loading");
+  }, [src]);
+
+  const showFallback = !src || state === "error";
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -22,7 +34,7 @@ export default function ForensicsImageCard({ title, caption, src }) {
       </div>
 
       <div className="relative flex aspect-[4/3] items-center justify-center bg-slate-50">
-        {state === "missing" || state === "error" ? (
+        {showFallback ? (
           <div className="flex flex-col items-center text-slate-400">
             <ImageOff className="h-7 w-7" />
             <p className="mt-2 text-xs">Image not available</p>
